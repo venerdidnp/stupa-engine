@@ -21,6 +21,7 @@ import objio
 import ppm_io
 import raster3d
 import raytrace
+import worked_example
 from transforms import (
     look_at,
     perspective,
@@ -877,6 +878,17 @@ def phase5():
         check("compare: exit code 1 when PSNR misses --min-psnr", code_fail, 1)
 
 
+def phase6():
+    """Phase 6 checks: the worked-example script reproduces the reference run."""
+    print("=== Phase 6: worked example ===")
+    mismatches = worked_example.run(verbose=False)
+    check(
+        "worked_example: reference run matches everywhere (0 mismatches)",
+        mismatches,
+        0,
+    )
+
+
 def main():
     """Run every phase section and print a summary; exit code 0 on success."""
     print("stupa-engine -- numeric checks")
@@ -885,6 +897,7 @@ def main():
     phase3()
     phase4()
     phase5()
+    phase6()
     # Later phases append their own section here as they are built.
 
     print()
