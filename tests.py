@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
+import broken_scene
 import compare
 import make_model
 import metrics
@@ -889,6 +890,85 @@ def phase6():
     )
 
 
+def phase7():
+    """Phase 7 checks: the broken-scene showcase -- bugs and their fixes.
+
+    The demos run at 160x120 so the whole section stays under a second.
+    Exact counts (culled triangles, covered pixels) are deterministic
+    geometry facts; the flicker and SSIM checks use loose sanity bands.
+    """
+    print("=== Phase 7: broken scene showcase ===")
+
+    mesh, texture = broken_scene._load_scene()
+    settings = raster3d.RenderSettings(width=160, height=120)
+    camera = raster3d.Camera()
+
+    # --- Bug 1: reversed winding ------------------------------------------
+    r = broken_scene.demo_inside_out(mesh, texture, settings, camera)
+    check(
+        "inside-out: culled count flips (92 correct -> 88 broken)",
+        [r["culled_ref"], r["culled_broken"]],
+        [92, 88],
+    )
+    check(
+        "inside-out: the probe depth moves to the far side of the box",
+        int(r["probe_depth_broken"] > r["probe_depth_ref"] + 0.005),
+        1,
+    )
+    check(
+        "inside-out: broken frame clearly differs (SSIM < 0.95)",
+        int(r["comparison"]["ssim"] < 0.95),
+        1,
+    )
+    check(
+        "inside-out: fix restores the reference byte for byte",
+        int(r["fix_identical"]),
+        1,
+    )
+
+    # --- Bug 2: near plane at 1e-3 with a 16-bit depth buffer --------------
+    r = broken_scene.demo_zfight(mesh, texture, settings, camera)
+    check(
+        "zfight: 8-bit depth histogram collapses (>=4 codes -> 1)",
+        [int(r["codes_ref"] >= 4), r["codes_broken"]],
+        [1, 1],
+    )
+    check(
+        "zfight: the 16-bit buffer stores only a couple of codes",
+        int(r["codes16_broken"] <= 4),
+        1,
+    )
+    check(
+        "zfight: half-LSB dither flips hundreds of pixels at near=1e-3",
+        int(r["flicker_broken"] > 100),
+        1,
+    )
+    check("zfight: no flicker at near=1", r["flicker_fixed"], 0)
+    check(
+        "zfight: 16-bit buffer at near=1 matches float64 exactly",
+        r["fixed_vs_ref_differing"],
+        0,
+    )
+
+    # --- Bug 3: V @ P instead of P @ V -------------------------------------
+    r = broken_scene.demo_stretched(mesh, texture, settings, camera)
+    check(
+        "stretched: the broken chain covers the whole frame",
+        [r["covered_ref"], r["covered_broken"]],
+        [3258, 160 * 120],
+    )
+    check(
+        "stretched: broken frame is garbage (SSIM < 0.5)",
+        int(r["comparison"]["ssim"] < 0.5),
+        1,
+    )
+    check(
+        "stretched: fix restores the reference byte for byte",
+        int(r["fix_identical"]),
+        1,
+    )
+
+
 def main():
     """Run every phase section and print a summary; exit code 0 on success."""
     print("stupa-engine -- numeric checks")
@@ -898,6 +978,7 @@ def main():
     phase4()
     phase5()
     phase6()
+    phase7()
     # Later phases append their own section here as they are built.
 
     print()
