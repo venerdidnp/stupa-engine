@@ -414,7 +414,7 @@ class Texture:
         return out
 
 
-def _pixel_mip_level(tri, weights, u, v, tex_size, n_levels):
+def pixel_mip_level(tri, weights, u, v, tex_size, n_levels):
     """Per-pixel mip level from the analytic UV gradient (quotient rule).
 
     Inputs: tri       -- ScreenTriangle (needs uv, inv_w, pos);
@@ -657,7 +657,7 @@ def rasterize_triangle(color_fb, depth_fb, tri, texture, settings):
         v = interp_perspective(wts, tri.uv[:, 1], tri.inv_w)
         if settings.mipmaps:
             tex_size = max(texture.width, texture.height)
-            level = _pixel_mip_level(tri, wts, u, v, tex_size, len(texture.levels))
+            level = pixel_mip_level(tri, wts, u, v, tex_size, len(texture.levels))
         else:
             level = 0
         albedo = texture.fetch(u, v, level, settings.bilinear)
@@ -817,7 +817,7 @@ def render_scene(mesh, texture, settings, camera=Camera()):
 # Command line entry point and output files
 # ---------------------------------------------------------------------------
 
-def _write_png_preview(ppm_path):
+def write_png_preview(ppm_path):
     """Convert a written PPM to a PNG next to it, for quick viewing.
 
     Input:  ppm_path -- Path of an existing PPM file.
@@ -833,7 +833,7 @@ def _write_png_preview(ppm_path):
     Image.fromarray(img).save(ppm_path.with_suffix(".png"))
 
 
-def _depth_to_rgb(depth01):
+def depth_to_rgb(depth01):
     """Turn the depth image into a gray uint8 RGB image (PPM-ready).
 
     Input:  depth01 -- (H, W) float in [0, 1];
@@ -875,16 +875,16 @@ def render_stage(step, mesh, texture, write_stage=True, write_final=False):
     if write_stage:
         ppm_path = OUT_DIR / f"{label}.ppm"
         ppm_io.write_ppm(ppm_path, result.color_srgb)
-        _write_png_preview(ppm_path)
+        write_png_preview(ppm_path)
         if settings.use_depth:
             depth_path = OUT_DIR / f"{label}_depth.ppm"
-            ppm_io.write_ppm(depth_path, _depth_to_rgb(result.depth01))
+            ppm_io.write_ppm(depth_path, depth_to_rgb(result.depth01))
     if write_final:
         final_path = OUT_DIR / "temple_raster.ppm"
         ppm_io.write_ppm(final_path, result.color_srgb)
-        _write_png_preview(final_path)
+        write_png_preview(final_path)
         if settings.use_depth:
-            ppm_io.write_ppm(OUT_DIR / "temple_depth.ppm", _depth_to_rgb(result.depth01))
+            ppm_io.write_ppm(OUT_DIR / "temple_depth.ppm", depth_to_rgb(result.depth01))
 
     _print_stats(step, settings, result)
     return result

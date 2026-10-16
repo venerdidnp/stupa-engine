@@ -18,6 +18,7 @@ import make_model
 import objio
 import ppm_io
 import raster3d
+import raytrace
 from transforms import (
     look_at,
     perspective,
@@ -584,12 +585,223 @@ def phase3():
     )
 
 
+def _psnr(a, b):
+    """Peak signal-to-noise ratio of two uint8 images, in dB.
+
+    Standard definition with the peak at 255; identical images give inf.
+    """
+    diff = a.astype(np.float64) - b.astype(np.float64)
+    mse = float(np.mean(diff * diff))
+    if mse == 0.0:
+        return float("inf")
+    return 10.0 * np.log10((255.0 * 255.0) / mse)
+
+
+def _depth_edge_mask(depth01, eps=1e-6):
+    """True where depth01 jumps to a 4-neighbor by more than eps.
+
+    A pixel is marked when it borders a depth discontinuity (itself on one
+    side of the jump, or directly across it). These are exactly the pixels
+    where the rasterizer's inside test and the ray tracer's hit test may
+    legally disagree, because the silhouette passes between their samples.
+    """
+    mask = np.zeros(depth01.shape, dtype=bool)
+    mask[1:, :] |= np.abs(depth01[1:, :] - depth01[:-1, :]) > eps
+    mask[:-1, :] |= np.abs(depth01[1:, :] - depth01[:-1, :]) > eps
+    mask[:, 1:] |= np.abs(depth01[:, 1:] - depth01[:, :-1]) > eps
+    mask[:, :-1] |= np.abs(depth01[:, 1:] - depth01[:, :-1]) > eps
+    return mask
+
+
+def _dilate(mask, radius):
+    """OR the mask with shifted copies of itself (no wrap), by `radius`."""
+    out = mask.copy()
+    h, w = mask.shape
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            out[max(0, dy) : min(h, h + dy), max(0, dx) : min(w, w + dx)] |= mask[
+                max(0, -dy) : min(h, h - dy), max(0, -dx) : min(w, w - dx)
+            ]
+    return out
+
+
+def phase4():
+    """Phase 4 checks: ray-triangle math and the full ray tracer."""
+    print("=== Phase 4: ray tracer ===")
+
+    # --- Moller-Trumbore on hand-checkable geometry -----------------------
+    # A ray straight down -z at a triangle living in the plane z = -2,
+    # arranged so the hit is exactly the corner v0.
+    o = np.array([[0.0, 0.0, 5.0]])
+    d = np.array([[0.0, 0.0, -1.0]])
+    v0 = np.array([0.0, 0.0, -2.0])
+    v1 = np.array([2.0, 0.0, -2.0])
+    v2 = np.array([0.0, 2.0, -2.0])
+    t, u, v = raytrace.intersect_triangles(o, d, v0, v1, v2)
+    check("ray: straight-down hit at corner v0 -> t = 7", t[0], 7.0, atol=1e-12)
+    check(
+        "ray: hit at v0 -> barycentrics u = v = 0",
+        [u[0], v[0]],
+        [0.0, 0.0],
+        atol=1e-12,
+    )
+
+    single = objio.ObjMesh(
+        positions=np.array([v0, v1, v2]),
+        uvs=np.zeros((0, 2)),
+        face_vertex_indices=np.array([[0, 1, 2]], dtype=np.int32),
+        face_uv_indices=np.array([[-1, -1, -1]], dtype=np.int32),
+    )
+    tri_idx, t_hit, _, _, point = raytrace.first_hit(o, d, single)
+    check(
+        "first_hit: single triangle -> index 0, t = 7",
+        [tri_idx[0], t_hit[0]],
+        [0.0, 7.0],
+        atol=1e-12,
+    )
+    check("first_hit: hit point lands on (0, 0, -2)", point[0], [0.0, 0.0, -2.0], atol=1e-12)
+
+    # Three ways to miss: parallel to the triangle plane, behind the
+    # origin, and passing beside the triangle.
+    t_par, _, _ = raytrace.intersect_triangles(o, np.array([[1.0, 0.0, 0.0]]), v0, v1, v2)
+    check("ray: parallel ray misses -> t = inf", int(np.isinf(t_par[0])), 1)
+    t_back, _, _ = raytrace.intersect_triangles(
+        np.array([[0.0, 0.0, -10.0]]), d, v0, v1, v2
+    )
+    check("ray: triangle behind the origin misses -> t = inf", int(np.isinf(t_back[0])), 1)
+    t_side, _, _ = raytrace.intersect_triangles(
+        np.array([[5.0, 0.0, 5.0]]), d, v0, v1, v2
+    )
+    check("ray: ray passing beside the triangle misses -> t = inf", int(np.isinf(t_side[0])), 1)
+
+    # Two-sided test: from below, the point (0.5, 0.5) -> u = v = 0.25.
+    t_two, u_two, v_two = raytrace.intersect_triangles(
+        np.array([[0.5, 0.5, -5.0]]), np.array([[0.0, 0.0, 1.0]]), v0, v1, v2
+    )
+    check("ray: back side is hittable (two-sided) -> t = 3", t_two[0], 3.0, atol=1e-12)
+    check(
+        "ray: from below (0.5,0.5) -> u = v = 0.25",
+        [u_two[0], v_two[0]],
+        [0.25, 0.25],
+        atol=1e-12,
+    )
+
+    # --- pixel_rays ties into the project + viewport chain ----------------
+    # A ray through the exact screen position of a projected world point
+    # must be parallel to eye -> point. Checked on the square worked
+    # example camera and on the pinned temple camera.
+    sq_cam = raster3d.Camera(eye=(0.0, 0.0, 8.0), target=(0.0, 0.0, 0.0), fovy_deg=60.0)
+    V_sq = look_at(sq_cam.eye, sq_cam.target, sq_cam.up)
+    P_sq = perspective(sq_cam.fovy_deg, 1.0, sq_cam.near, sq_cam.far)
+    world_pt = np.array([[3.0, 3.0, -3.0]])
+    _, ndc_pt = project(P_sq, V_sq, np.eye(4), world_pt)
+    scr = viewport(ndc_pt, 800, 800)[0]
+    o_sq, d_sq = raytrace.pixel_rays(
+        sq_cam, 800, 800, np.array([scr[0]]), np.array([scr[1]])
+    )
+    check(
+        "pixel_rays: ray through the projected (3,3,-3) is parallel (cross = 0)",
+        float(np.linalg.norm(np.cross(d_sq[0], world_pt[0] - np.array(sq_cam.eye)))),
+        0.0,
+        atol=1e-9,
+    )
+    check("pixel_rays: origins are the eye", o_sq[0], sq_cam.eye)
+
+    o_c, d_c = raytrace.pixel_rays(sq_cam, 800, 800, np.array([400.0]), np.array([400.0]))
+    check("pixel_rays: center pixel looks straight down -z", d_c[0], [0.0, 0.0, -1.0], atol=1e-12)
+
+    cam = raster3d.Camera()
+    V_t = look_at(cam.eye, cam.target, cam.up)
+    P_t = perspective(cam.fovy_deg, 160.0 / 120.0, cam.near, cam.far)
+    body_pt = np.array([[0.0, 3.4, 1.6]])
+    _, ndc_b = project(P_t, V_t, np.eye(4), body_pt)
+    scr_b = viewport(ndc_b, 160, 120)[0]
+    o_b, d_b = raytrace.pixel_rays(
+        cam, 160, 120, np.array([scr_b[0]]), np.array([scr_b[1]])
+    )
+    check(
+        "pixel_rays: temple-camera ray through the body point is parallel",
+        float(np.linalg.norm(np.cross(d_b[0], body_pt[0] - np.array(cam.eye)))),
+        0.0,
+        atol=1e-9,
+    )
+
+    o_all, d_all = raytrace.camera_rays(sq_cam, 800, 800)
+    check("camera_rays: one ray per pixel (W*H)", len(d_all), 800 * 800)
+    check("camera_rays: first ray starts at the eye", o_all[0], sq_cam.eye)
+
+    # --- Full render: ray tracer vs rasterizer ----------------------------
+    # Same scene, same camera, same size: the two images must match up to
+    # float-precision edge decisions. PSNR > 60 dB allows a handful of
+    # one-quantization-step flips; the structural check is the second one:
+    # every differing pixel must sit within 2 px of a depth discontinuity,
+    # i.e. exactly where a silhouette sample can legally fall on either
+    # side of the edge.
+    temple = objio.load_obj(make_model.DATA_DIR / "temple.obj")
+    texture = raster3d.Texture(ppm_io.read_ppm(make_model.DATA_DIR / "relief.ppm")[2])
+    settings = raster3d.RenderSettings(width=160, height=120)
+
+    raster_res = raster3d.render_scene(temple, texture, settings)
+    ray_res = raytrace.ray_trace(temple, texture, settings)
+
+    psnr = _psnr(raster_res.color_srgb, ray_res.color_srgb)
+    print(f"  raster vs ray (default): PSNR = {psnr:.1f} dB")
+    check("ray trace: PSNR vs the rasterizer > 60 dB", int(psnr > 60.0), 1)
+    diff = np.any(raster_res.color_srgb != ray_res.color_srgb, axis=2)
+    print(f"  differing pixels = {int(diff.sum())} of {diff.size}")
+    edges = _dilate(_depth_edge_mask(raster_res.depth01), 2)
+    check(
+        "ray trace: every differing pixel is within 2 px of a depth edge",
+        int((diff & ~edges).sum()),
+        0,
+    )
+
+    shared = np.isfinite(raster_res.depth_ndc) & np.isfinite(ray_res.depth_ndc)
+    max_depth_diff = float(
+        np.abs(raster_res.depth_ndc[shared] - ray_res.depth_ndc[shared]).max()
+    )
+    print(f"  depth: {int(shared.sum())} shared pixels, max |diff| = {max_depth_diff:.2e}")
+    check("ray trace: depth matches the rasterizer to 1e-9", max_depth_diff, 0.0, atol=1e-9)
+
+    raster_cov = int(np.isfinite(raster_res.depth_ndc).sum())
+    ray_cov = int(np.isfinite(ray_res.depth_ndc).sum())
+    print(f"  coverage: raster {raster_cov} pixels, ray {ray_cov} pixels")
+    check(
+        "ray trace: covered pixel count matches the rasterizer (ties only)",
+        int(abs(ray_cov - raster_cov) <= 4),
+        1,
+    )
+
+    ray_res2 = raytrace.ray_trace(temple, texture, settings)
+    check(
+        "ray trace: deterministic (two runs byte-identical)",
+        int(np.array_equal(ray_res.color_srgb, ray_res2.color_srgb)),
+        1,
+    )
+
+    # Nearest filtering, no mipmaps: exercises the scalar-level fetch path.
+    settings_near = raster3d.RenderSettings(width=160, height=120, bilinear=False, mipmaps=False)
+    raster_near = raster3d.render_scene(temple, texture, settings_near)
+    ray_near = raytrace.ray_trace(temple, texture, settings_near)
+    psnr_near = _psnr(raster_near.color_srgb, ray_near.color_srgb)
+    print(f"  raster vs ray (nearest, no mips): PSNR = {psnr_near:.1f} dB")
+    check("ray trace: PSNR vs rasterizer (nearest, no mips) > 60 dB", int(psnr_near > 60.0), 1)
+    diff_near = np.any(raster_near.color_srgb != ray_near.color_srgb, axis=2)
+    edges_near = _dilate(_depth_edge_mask(raster_near.depth01), 2)
+    check(
+        "ray trace: differing pixels (nearest, no mips) hug depth edges",
+        int((diff_near & ~edges_near).sum()),
+        0,
+    )
+
+
 def main():
     """Run every phase section and print a summary; exit code 0 on success."""
     print("stupa-engine -- numeric checks")
     phase1()
     phase2()
     phase3()
+    phase4()
     # Later phases append their own section here as they are built.
 
     print()
