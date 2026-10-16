@@ -10,6 +10,10 @@ Running this file writes:
     data/relief.png  -- the same texture as PNG, for the web viewer
                         (browsers cannot decode PPM).
 
+The same three files are copied to web/data/ as well: the viewer is
+served on its own (npx serve web, GitHub Pages), so it needs the assets
+reachable from its own folder.
+
 The asset counts are pinned by the plan: 180 triangles, 120 vertices.
 15 boxes x 8 corners = 120 vertices, and 15 x 6 quad faces = 90 quads
 fan-triangulated to 180 triangles. Exactly right, with no vertex
@@ -23,6 +27,7 @@ on every machine, which keeps the renders comparable.
 Run:  python make_model.py
 """
 
+import shutil
 from collections import namedtuple
 from pathlib import Path
 
@@ -41,6 +46,10 @@ UV_SCALE = 1.0 / 3.0
 # Where the generated files go (script-relative so the working
 # directory does not matter).
 DATA_DIR = Path(__file__).resolve().parent / "data"
+
+# Where the viewer looks for its assets when it is served on its own
+# (npx serve web, GitHub Pages); build() copies them here.
+WEB_DATA_DIR = Path(__file__).resolve().parent / "web" / "data"
 
 # A box: axis-aligned, described by its center and half-extents.
 Box = namedtuple("Box", ["name", "center", "half"])
@@ -287,17 +296,22 @@ def sandstone_texture(size=256, seed=SEED):
 
 
 def build(out_dir=None, seed=SEED):
-    """Generate both assets into out_dir (default: data/ next to this file).
+    """Generate the assets into out_dir (default: data/ next to this file).
 
     Output: (obj_path, ppm_path) -- Paths to the two written files.
     Deterministic: same seed -> byte-identical files, so renders and
     diffs across machines stay comparable.
+
+    For the default location only, the same three files are copied to
+    web/data/ as well (see the module docstring for why).
     """
+    canonical = out_dir is None
     out_dir = Path(out_dir) if out_dir is not None else DATA_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     obj_path = out_dir / "temple.obj"
     ppm_path = out_dir / "relief.ppm"
+    png_path = out_dir / "relief.png"
 
     boxes = temple_boxes()
     _write_obj(obj_path, boxes)
@@ -310,7 +324,13 @@ def build(out_dir=None, seed=SEED):
     # them. The PPM stays the artifact the pipeline samples.
     from PIL import Image  # conversion only, see comment above
 
-    Image.fromarray(texture).save(out_dir / "relief.png")
+    Image.fromarray(texture).save(png_path)
+
+    if canonical:
+        WEB_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        for src in (obj_path, ppm_path, png_path):
+            shutil.copyfile(src, WEB_DATA_DIR / src.name)
+
     return obj_path, ppm_path
 
 
@@ -320,4 +340,5 @@ if __name__ == "__main__":
     print(f"  {15 * 8} vertices, {15 * 24} uvs, {15 * 12} triangles")
     print(f"wrote {ppm_path}")
     print(f"wrote {ppm_path.with_suffix('.png')} (viewer copy)")
+    print(f"copied the three files to {WEB_DATA_DIR} (viewer folder)")
     print("  256x256 RGB sandstone texture")

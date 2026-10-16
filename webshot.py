@@ -172,12 +172,14 @@ def main(argv=None):
         DATA_DIR / "temple.obj",
         DATA_DIR / "relief.ppm",
         DATA_DIR / "relief.png",
+        ROOT / "web" / "data" / "temple.obj",
+        ROOT / "web" / "data" / "relief.png",
         ROOT / "web" / "index.html",
         ROOT / "web" / "viewer.js",
     ]
     for path in required:
         if not path.is_file():
-            hint = " -- run python make_model.py" if path.parent == DATA_DIR else ""
+            hint = " -- run python make_model.py" if path.parent.name == "data" else ""
             print(f"webshot: missing {path}{hint}")
             return 2
 

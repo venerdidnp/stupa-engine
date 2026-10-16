@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 
 # Generated assets: the model and texture are rebuilt by make_model.py,
-# so no binary or generated data is committed to the repo.
+# so no binary or generated data is committed to the repo. web/data/ is
+# the viewer's copy of the same assets.
 data/
+web/data/
 out/

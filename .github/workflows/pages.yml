@@ -1,0 +1,61 @@
+# Build the viewer and publish it to GitHub Pages.
+#
+# The generated assets are not committed (see .gitignore), so the job
+# rebuilds them from scratch here: pip install, make_model.py, the full
+# numeric check suite, then web/ (which make_model has filled with
+# web/data/) is uploaded as the site itself. The viewer's asset paths
+# are relative to its own folder, which is exactly this layout.
+#
+# One-time setup in the repository: Settings -> Pages -> Build and
+# deployment -> Source: GitHub Actions.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push cancels an in-flight run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate the assets and run the checks
+        run: |
+          python make_model.py
+          python tests.py
+
+      - name: Upload the viewer folder as the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

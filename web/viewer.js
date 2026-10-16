@@ -94,8 +94,12 @@ sunLight.position.set(...LIGHT_DIR);
 scene.add(ambientLight, sunLight);
 
 // --- texture: the PNG copy of data/relief.ppm -----------------------------
+// Asset paths are relative to THIS folder: the viewer is always served
+// with a data/ folder next to it (make_model.py fills web/data/, and the
+// Pages workflow publishes the same layout), so it works both under
+// "npx serve web" and under a server rooted at the repo.
 const texture = new THREE.TextureLoader().load(
-  '../data/relief.png',
+  'data/relief.png',
   undefined,
   undefined,
   () => { status.textContent = 'missing data/relief.png -- run python make_model.py'; }
@@ -110,7 +114,7 @@ texture.minFilter = THREE.LinearMipmapLinearFilter;  // mip chain, like stage 9
 // --- mesh: OBJ geometry with flat normals + Lambert ------------------------
 const loader = new OBJLoader();
 loader.load(
-  '../data/temple.obj',
+  'data/temple.obj',
   (group) => {
     group.traverse((child) => {
       if (!child.isMesh) return;

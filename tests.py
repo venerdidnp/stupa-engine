@@ -1026,6 +1026,14 @@ def phase8():
         int('id="export"' in html and "webgl.ppm" in js),
         1,
     )
+    check(
+        "web: make_model copied the assets into web/data/",
+        int(
+            (root / "web" / "data" / "temple.obj").is_file()
+            and (root / "web" / "data" / "relief.png").is_file()
+        ),
+        1,
+    )
 
     shot_path = root / "out" / "webgl_shot.ppm"
     if not shot_path.is_file():
