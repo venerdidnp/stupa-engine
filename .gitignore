@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.pyc
+
+# Generated assets: the model and texture are rebuilt by make_model.py,
+# so no binary or generated data is committed to the repo.
+data/
+out/
