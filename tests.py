@@ -14,7 +14,9 @@ from pathlib import Path
 
 import numpy as np
 
+import compare
 import make_model
+import metrics
 import objio
 import ppm_io
 import raster3d
@@ -795,6 +797,86 @@ def phase4():
     )
 
 
+def phase5():
+    """Phase 5 checks: metrics with hand-computable values, compare CLI."""
+    print("=== Phase 5: metrics and comparison ===")
+
+    # --- PSNR anchors: black vs white is exactly 0 dB, self is inf --------
+    black = np.zeros((4, 4, 3), dtype=np.uint8)
+    white = np.full((4, 4, 3), 255, dtype=np.uint8)
+    check("psnr: black vs white = 0 dB", metrics.psnr(black, white), 0.0, atol=1e-12)
+    check("psnr: identical images = inf", int(np.isinf(metrics.psnr(black, black))), 1)
+    one_off = np.full((4, 4, 3), 1, dtype=np.uint8)
+    # MSE = 1, so PSNR = 10*log10(255^2) = the well-known 48.130804 dB.
+    check(
+        "psnr: uniform offset of 1 -> 48.130804 dB",
+        metrics.psnr(black, one_off),
+        48.130804,
+        atol=1e-5,
+    )
+
+    # --- SSIM: identical is exactly 1; flat images collapse to the -------
+    # luminance term only (zero variance kills the contrast factor):
+    # SSIM(flat a, flat b) = (2ab + C1) / (a^2 + b^2 + C1), C1 = 6.5025.
+    flat100 = np.full((4, 4, 3), 100.0)
+    flat200 = np.full((4, 4, 3), 200.0)
+    check("ssim: identical images = 1", metrics.ssim(flat100, flat100), 1.0, atol=1e-12)
+    check(
+        "ssim: flat 100 vs flat 200 -> (2*100*200 + C1)/(100^2 + 200^2 + C1)",
+        metrics.ssim(flat100, flat200),
+        (40000.0 + 6.5025) / (50000.0 + 6.5025),
+        atol=1e-12,
+    )
+
+    # A uniform brightness shift must leave the contrast/structure factor
+    # exactly 1: both ramps have the same spread, so
+    # SSIM = (2*mx*my + C1) / (mx^2 + my^2 + C1) with the shifted means.
+    ramp_a = np.repeat(np.array([0.0, 255.0])[None, :, None], 3, axis=2)
+    ramp_b = np.repeat(np.array([1.0, 256.0])[None, :, None], 3, axis=2)
+    check(
+        "ssim: brightness shift keeps the contrast term exactly 1",
+        metrics.ssim(ramp_a, ramp_b),
+        (2.0 * 127.5 * 128.5 + 6.5025) / (127.5**2 + 128.5**2 + 6.5025),
+        atol=1e-12,
+    )
+
+    # --- Mean and max absolute difference on known pixels -----------------
+    a = np.zeros((1, 2, 3), dtype=np.uint8)
+    b = np.zeros((1, 2, 3), dtype=np.uint8)
+    b[0, 0] = [2, 2, 2]
+    b[0, 1] = [4, 4, 4]
+    check("mean |diff| of pixel diffs 2 and 4 -> 3", metrics.mean_abs_diff(a, b), 3.0)
+    check("max |diff| of pixel diffs 2 and 4 -> 4", metrics.max_abs_diff(a, b), 4.0)
+
+    # --- Diff image: gain, rounding and clipping --------------------------
+    d_img = metrics.diff_image(a, b, gain=100.0)
+    check(
+        "diff image: 2x100 -> 200, 4x100 -> clipped 255",
+        d_img.ravel(),
+        [200, 200, 200, 255, 255, 255],
+    )
+
+    # --- compare CLI end to end on tiny files -----------------------------
+    with tempfile.TemporaryDirectory() as tmp:
+        pa = Path(tmp) / "a.ppm"
+        pb = Path(tmp) / "b.ppm"
+        pd = Path(tmp) / "d.ppm"
+        ppm_io.write_ppm(pa, a)
+        ppm_io.write_ppm(pb, b)
+
+        code_ok = compare.main([str(pa), str(pb), "--diff", str(pd), "--min-psnr", "0"])
+        check("compare: exit code 0 when PSNR passes --min-psnr", code_ok, 0)
+        _, _, back = ppm_io.read_ppm(pd)
+        check(
+            "compare: wrote the amplified diff PPM (default gain 4)",
+            back.ravel(),
+            metrics.diff_image(a, b, gain=4.0).ravel(),
+        )
+
+        code_fail = compare.main([str(pa), str(pb), "--diff", str(pd), "--min-psnr", "100"])
+        check("compare: exit code 1 when PSNR misses --min-psnr", code_fail, 1)
+
+
 def main():
     """Run every phase section and print a summary; exit code 0 on success."""
     print("stupa-engine -- numeric checks")
@@ -802,6 +884,7 @@ def main():
     phase2()
     phase3()
     phase4()
+    phase5()
     # Later phases append their own section here as they are built.
 
     print()
