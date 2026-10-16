@@ -969,6 +969,108 @@ def phase7():
     )
 
 
+def phase8():
+    """Phase 8 checks: the web viewer files and the captured WebGL frame.
+
+    The viewer itself runs in a browser, so this section checks what can
+    be checked without one: the files exist and pin the settings that
+    must match the pipeline. When out/webgl_shot.ppm exists (written by
+    `python webshot.py`), the captured frame is scored against a fresh
+    NumPy render too: PSNR, and the "differences hug edges" property from
+    the plan (MSAA at silhouettes, exact interior).
+    """
+    print("=== Phase 8: web viewer ===")
+
+    root = Path(__file__).resolve().parent
+    html_path = root / "web" / "index.html"
+    js_path = root / "web" / "viewer.js"
+    html = html_path.read_text(encoding="utf-8")
+    js = js_path.read_text(encoding="utf-8")
+
+    check(
+        "web: index.html and viewer.js exist",
+        int(html_path.is_file() and js_path.is_file()),
+        1,
+    )
+    check(
+        "web: importmap pins three@0.186.1 and the addons prefix",
+        int("three@0.186.1" in html and "three/addons/" in html),
+        1,
+    )
+    check(
+        "web: flipY = false (the UV convention match)",
+        int("texture.flipY = false" in js),
+        1,
+    )
+    check(
+        "web: fixed 512x512 size, pixel ratio 1, sRGB, no tone mapping",
+        int(
+            "const SIZE = 512" in js
+            and "setPixelRatio(1)" in js
+            and "SRGBColorSpace" in js
+            and "NoToneMapping" in js
+        ),
+        1,
+    )
+    check(
+        "web: OrbitControls + OBJLoader + exactly one directional light",
+        int(
+            "OrbitControls" in js
+            and "OBJLoader" in js
+            and js.count("new THREE.DirectionalLight(") == 1
+        ),
+        1,
+    )
+    check(
+        "web: the PPM export button is wired",
+        int('id="export"' in html and "webgl.ppm" in js),
+        1,
+    )
+
+    shot_path = root / "out" / "webgl_shot.ppm"
+    if not shot_path.is_file():
+        print("note: no out/webgl_shot.ppm -- run python webshot.py to score a capture")
+        return
+
+    # --- the captured frame against a fresh NumPy render --------------------
+    width, height, shot = ppm_io.read_ppm(shot_path)
+    mesh = objio.load_obj(root / "data" / "temple.obj")
+    texture = raster3d.Texture(ppm_io.read_ppm(root / "data" / "relief.ppm")[2])
+    ref = raster3d.render_scene(
+        mesh, texture, raster3d.RenderSettings(width=width, height=height)
+    )
+    result = compare.compare_images(ref.color_srgb, shot)
+    check(
+        "web: capture PSNR vs the NumPy frame above 25 dB",
+        int(result["psnr"] > 25.0),
+        1,
+    )
+
+    # Every differing pixel must hug a color edge of the reference; the
+    # interior has to match exactly. Build the edge mask from the four
+    # pixel neighbor pairs, then grow it two pixels on every side.
+    differing = np.any(ref.color_srgb != shot, axis=2)
+    edges = np.zeros_like(differing)
+    v_edge = np.any(ref.color_srgb[:, :-1] != ref.color_srgb[:, 1:], axis=2)
+    h_edge = np.any(ref.color_srgb[:-1, :] != ref.color_srgb[1:, :], axis=2)
+    edges[:, :-1] |= v_edge
+    edges[:, 1:] |= v_edge
+    edges[:-1, :] |= h_edge
+    edges[1:, :] |= h_edge
+    for _ in range(2):
+        grown = edges.copy()
+        grown[:, :-1] |= edges[:, 1:]
+        grown[:, 1:] |= edges[:, :-1]
+        grown[:-1, :] |= edges[1:, :]
+        grown[1:, :] |= edges[:-1, :]
+        edges = grown
+    check(
+        "web: every differing pixel is within 2 px of a color edge",
+        int((differing & ~edges).sum()),
+        0,
+    )
+
+
 def main():
     """Run every phase section and print a summary; exit code 0 on success."""
     print("stupa-engine -- numeric checks")
@@ -979,6 +1081,7 @@ def main():
     phase5()
     phase6()
     phase7()
+    phase8()
     # Later phases append their own section here as they are built.
 
     print()

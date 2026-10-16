@@ -7,6 +7,8 @@ Running this file writes:
                         faces (fans triangulate to 180 triangles),
                         with per-face planar UVs.
     data/relief.ppm  -- 256x256 procedural sandstone texture.
+    data/relief.png  -- the same texture as PNG, for the web viewer
+                        (browsers cannot decode PPM).
 
 The asset counts are pinned by the plan: 180 triangles, 120 vertices.
 15 boxes x 8 corners = 120 vertices, and 15 x 6 quad faces = 90 quads
@@ -299,7 +301,16 @@ def build(out_dir=None, seed=SEED):
 
     boxes = temple_boxes()
     _write_obj(obj_path, boxes)
-    ppm_io.write_ppm(ppm_path, sandstone_texture(256, seed))
+    texture = sandstone_texture(256, seed)
+    ppm_io.write_ppm(ppm_path, texture)
+
+    # Browsers cannot decode PPM, so the web viewer needs the same texture
+    # as a PNG. Pillow is imported HERE, on purpose: in this project it is
+    # allowed to convert images for display, never to render or filter
+    # them. The PPM stays the artifact the pipeline samples.
+    from PIL import Image  # conversion only, see comment above
+
+    Image.fromarray(texture).save(out_dir / "relief.png")
     return obj_path, ppm_path
 
 
@@ -308,4 +319,5 @@ if __name__ == "__main__":
     print(f"wrote {obj_path}")
     print(f"  {15 * 8} vertices, {15 * 24} uvs, {15 * 12} triangles")
     print(f"wrote {ppm_path}")
+    print(f"wrote {ppm_path.with_suffix('.png')} (viewer copy)")
     print("  256x256 RGB sandstone texture")

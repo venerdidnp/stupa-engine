@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stupa-engine -- Three.js viewer</title>
+<style>
+  /* The canvas is pinned to the exact size of the NumPy reference frame
+     (512x512) and sits at (0, 0) with no page margin, so a headless
+     screenshot is the canvas pixel for pixel (see webshot.py). */
+  html, body { margin: 0; padding: 0; }
+  body { background: #dee6f2; font: 13px/1.45 system-ui, sans-serif; color: #26282b; }
+  #app canvas { display: block; width: 512px; height: 512px; }
+
+  /* Small overlay UI; hidden in auto mode (?auto=1) so screenshots only
+     contain the 3D view. */
+  #panel {
+    position: absolute; top: 8px; left: 8px; padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.88); border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  }
+  #panel button { margin-top: 6px; font: inherit; }
+  #status { color: #8a4b1f; }
+  body.auto #panel { display: none; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="panel">
+    <strong>stupa-engine</strong><br>
+    drag to orbit &middot; wheel to zoom<br>
+    <button id="export">Export PPM</button>
+    <div id="status"></div>
+  </div>
+
+  <!-- Pinned Three.js version from a CDN; the addons resolve through the
+       "three/addons/" prefix, the standard Three.js importmap layout. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.186.1/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./viewer.js"></script>
+</body>
+</html>
