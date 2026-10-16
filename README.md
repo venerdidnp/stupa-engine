@@ -1,4 +1,4 @@
-# candi-renderer
+# stupa-engine
 
 A small 3D renderer built from scratch with Python + NumPy, with a Three.js
 viewer for a low-poly textured temple (candi).
