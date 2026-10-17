@@ -74,7 +74,7 @@ setup: repository Settings -> Pages -> Source: **GitHub Actions**.
 | `metrics.py`, `compare.py` | PSNR, global SSIM, diff images, comparison CLI |
 | `make_model.py` | generates the stepped temple .obj + texture, deterministically |
 | `objio.py`, `ppm_io.py` | minimal OBJ loader and P6 PPM reader/writer |
-| `web/` | Three.js viewer (index.html, viewer.js) |
+| `web/` | Three.js viewer (index.html, style.css, viewer.js) |
 | `webshot.py` | headless browser capture scored against the NumPy frame |
 | `tests.py` | all numeric checks, one section per build phase |
 

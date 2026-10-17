@@ -36,7 +36,7 @@ compare.py        compares two renders, writes a diff image
 tests.py          all numeric checks
 data/             generated model + texture
 out/              rendered frames, depth maps, diffs
-web/              Three.js viewer (index.html, viewer.js)
+web/              Three.js viewer (index.html, style.css, viewer.js)
 requirements.txt  pinned versions
 ```
 

@@ -983,13 +983,21 @@ def phase8():
 
     root = Path(__file__).resolve().parent
     html_path = root / "web" / "index.html"
+    css_path = root / "web" / "style.css"
     js_path = root / "web" / "viewer.js"
     html = html_path.read_text(encoding="utf-8")
     js = js_path.read_text(encoding="utf-8")
 
     check(
-        "web: index.html and viewer.js exist",
-        int(html_path.is_file() and js_path.is_file()),
+        "web: index.html, style.css and viewer.js exist",
+        int(
+            html_path.is_file() and css_path.is_file() and js_path.is_file()
+        ),
+        1,
+    )
+    check(
+        "web: CSS lives in style.css, not inline in the HTML",
+        int("style.css" in html and "<style" not in html),
         1,
     )
     check(

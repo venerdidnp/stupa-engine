@@ -175,6 +175,7 @@ def main(argv=None):
         ROOT / "web" / "data" / "temple.obj",
         ROOT / "web" / "data" / "relief.png",
         ROOT / "web" / "index.html",
+        ROOT / "web" / "style.css",
         ROOT / "web" / "viewer.js",
     ]
     for path in required:
