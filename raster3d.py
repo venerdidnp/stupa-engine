@@ -514,6 +514,8 @@ class RenderSettings:
     use_texture: bool = True
     bilinear: bool = True
     mipmaps: bool = True
+    perspective_correct: bool = True
+    normal_matrix_mode: str = "correct"
     background_srgb: tuple = SKY_SRGB
     ambient: float = 0.3
     diffuse: float = 0.7
@@ -653,8 +655,12 @@ def rasterize_triangle(color_fb, depth_fb, tri, texture, settings):
     # Color: flat albedo or perspective-correct texture sample, shaded by
     # the per-triangle Lambert factor (all in linear light).
     if tri.uv is not None and texture is not None:
-        u = interp_perspective(wts, tri.uv[:, 0], tri.inv_w)
-        v = interp_perspective(wts, tri.uv[:, 1], tri.inv_w)
+        if getattr(settings, "perspective_correct", True):
+            u = interp_perspective(wts, tri.uv[:, 0], tri.inv_w)
+            v = interp_perspective(wts, tri.uv[:, 1], tri.inv_w)
+        else:
+            u = interp_linear(wts, tri.uv[:, 0])
+            v = interp_linear(wts, tri.uv[:, 1])
         if settings.mipmaps:
             tex_size = max(texture.width, texture.height)
             level = pixel_mip_level(tri, wts, u, v, tex_size, len(texture.levels))
@@ -668,7 +674,7 @@ def rasterize_triangle(color_fb, depth_fb, tri, texture, settings):
     return int(len(xi_sel))
 
 
-def render_scene(mesh, texture, settings, camera=Camera()):
+def render_scene(mesh, texture, settings, camera=Camera(), m_matrix=None):
     """Render a whole mesh with the current stage settings.
 
     Inputs:
@@ -677,6 +683,7 @@ def render_scene(mesh, texture, settings, camera=Camera()):
       texture  -- Texture (required when settings.use_texture).
       settings -- RenderSettings.
       camera   -- Camera (defaults to the pinned three-quarter view).
+      m_matrix -- Optional (4, 4) model transform matrix (default identity).
     Output: RenderResult.
 
     How: one MVP projection for all unique vertices, then per triangle:
@@ -687,6 +694,11 @@ def render_scene(mesh, texture, settings, camera=Camera()):
     width, height = settings.width, settings.height
     if width < 1 or height < 1:
         raise ValueError(f"render_scene: bad size {width}x{height}")
+
+    if m_matrix is None:
+        m_matrix = np.eye(4, dtype=np.float64)
+    else:
+        m_matrix = np.asarray(m_matrix, dtype=np.float64)
 
     # Clear color: decode the sky to linear ONCE, so the final encode
     # round-trips it back to exactly the authored sRGB value.
@@ -705,10 +717,10 @@ def render_scene(mesh, texture, settings, camera=Camera()):
     }
     t0 = time.perf_counter()
 
-    # Camera chain: P @ V @ M, M = identity (mesh is authored in world space).
+    # Camera chain: P @ V @ M
     p_matrix = perspective(camera.fovy_deg, width / height, camera.near, camera.far)
     v_matrix = look_at(camera.eye, camera.target, camera.up)
-    clip, _ = project(p_matrix, v_matrix, np.eye(4), mesh.positions)  # (N, 4)
+    clip, _ = project(p_matrix, v_matrix, m_matrix, mesh.positions)  # (N, 4)
 
     light_dir = np.asarray(settings.light_dir, dtype=np.float64)
     light_dir = light_dir / np.linalg.norm(light_dir)
@@ -739,10 +751,15 @@ def render_scene(mesh, texture, settings, camera=Camera()):
                 tri_uv = mesh.uvs[uv_idx]
 
         # Flat Lambert factor from the world-space face normal. Computed
-        # from the source triangle, so clipped pieces stay consistent.
+        # from the source triangle, transformed by M (or inverse-transpose of M).
         p0, p1, p2 = mesh.positions[idx]
         if settings.lambert:
-            normal = np.cross(p1 - p0, p2 - p0)
+            n_obj = np.cross(p1 - p0, p2 - p0)
+            if getattr(settings, "normal_matrix_mode", "correct") == "wrong":
+                normal = m_matrix[:3, :3] @ n_obj
+            else:
+                inv_m = np.linalg.inv(m_matrix[:3, :3])
+                normal = inv_m.T @ n_obj
             norm_len = np.linalg.norm(normal)
             ndotl = float(normal @ light_dir) / norm_len if norm_len > 0.0 else 0.0
             light = settings.ambient + settings.diffuse * max(0.0, ndotl)

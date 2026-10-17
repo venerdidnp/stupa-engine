@@ -239,9 +239,9 @@ def phase2():
     # --- Generate the real assets (deterministic) and load them back -----
     obj_path, tex_path = make_model.build()
     temple = objio.load_obj(obj_path)
-    check("temple.obj: vertices = 120", len(temple.positions), 120)
-    check("temple.obj: uvs = 360 (24 per box, one planar set per face)", len(temple.uvs), 360)
-    check("temple.obj: triangles = 180", len(temple.face_vertex_indices), 180)
+    check("temple.obj: vertices = 208", len(temple.positions), 208)
+    check("temple.obj: uvs = 624 (24 per box, one planar set per face)", len(temple.uvs), 624)
+    check("temple.obj: triangles = 312", len(temple.face_vertex_indices), 312)
     check(
         "temple.obj: every face corner references a uv",
         int((temple.face_uv_indices >= 0).all()),
@@ -269,14 +269,15 @@ def phase2():
     normals = np.cross(b - a, c - a)                    # (T, 3)
     centroids = (a + b + c) / 3.0
     outward_dot = np.empty(len(tri), dtype=np.float64)
-    for box_index in range(15):
+    num_boxes = len(pos) // 8
+    for box_index in range(num_boxes):
         lo, hi = box_index * 12, (box_index + 1) * 12  # 12 tris per box
         box_center = pos[box_index * 8 : (box_index + 1) * 8].mean(axis=0)
         outward_dot[lo:hi] = np.einsum("ij,ij->i", normals[lo:hi], centroids[lo:hi] - box_center)
     check(
-        "temple.obj: all 180 triangles wound CCW seen from outside",
+        "temple.obj: all 312 triangles wound CCW seen from outside",
         int((outward_dot > 0.0).sum()),
-        180,
+        312,
     )
 
     # --- The texture file -------------------------------------------------
@@ -531,7 +532,7 @@ def phase3():
         result.depth01[0, 0],
         1.0,
     )
-    check("full render: 180 triangles submitted", result.stats["submitted"], 180)
+    check("full render: 312 triangles submitted", result.stats["submitted"], 312)
     check(
         "full render: 0 near-clipped (camera is far from the model)",
         result.stats["clipped"],
@@ -546,7 +547,7 @@ def phase3():
     # Independent back-face count: a planar triangle is front-facing
     # exactly when its outward normal points toward the eye. If this
     # count matches the rasterizer's culled counter, the NDC area sign
-    # test and the geometric test agree on all 180 triangles.
+    # test and the geometric test agree on all 312 triangles.
     a = temple.positions[temple.face_vertex_indices[:, 0]]
     b = temple.positions[temple.face_vertex_indices[:, 1]]
     c = temple.positions[temple.face_vertex_indices[:, 2]]
@@ -554,7 +555,7 @@ def phase3():
     eye = np.array(raster3d.Camera().eye)
     facing = np.einsum("ij,ij->i", normals, eye[None, :] - a)
     expected_culled = int((facing <= 0.0).sum())
-    print(f"  independent back-face count = {expected_culled} of 180")
+    print(f"  independent back-face count = {expected_culled} of 312")
     check(
         "full render: culled matches the independent back-face count",
         result.stats["culled"],
@@ -906,9 +907,9 @@ def phase7():
     # --- Bug 1: reversed winding ------------------------------------------
     r = broken_scene.demo_inside_out(mesh, texture, settings, camera)
     check(
-        "inside-out: culled count flips (92 correct -> 88 broken)",
+        "inside-out: culled count flips (158 correct -> 154 broken)",
         [r["culled_ref"], r["culled_broken"]],
-        [92, 88],
+        [158, 154],
     )
     check(
         "inside-out: the probe depth moves to the far side of the box",
@@ -955,7 +956,7 @@ def phase7():
     check(
         "stretched: the broken chain covers the whole frame",
         [r["covered_ref"], r["covered_broken"]],
-        [3258, 160 * 120],
+        [3292, 160 * 120],
     )
     check(
         "stretched: broken frame is garbage (SSIM < 0.5)",

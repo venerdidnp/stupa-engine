@@ -8,6 +8,10 @@ texture sampling and the shading model are all written by hand. Every
 stage is checked against hand-computed reference numbers in `tests.py`,
 and the two renderers (raster and ray) are required to agree.
 
+Catatan aset 3D: Model candi (`data/temple.obj`, 312 segitiga, 208 vertex)
+dihasilkan secara prosedural oleh `make_model.py` (bukan hasil modeling manual
+di Blender), dengan UV planar per-face dan winding CCW konsisten.
+
 ## Quick start
 
 ```

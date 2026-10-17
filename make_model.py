@@ -2,9 +2,9 @@
 make_model.py -- generates the stepped temple assets, deterministically.
 
 Running this file writes:
-    data/temple.obj  -- 15 stacked axis-aligned boxes:
-                        120 vertex records, 360 UV records and 90 quad
-                        faces (fans triangulate to 180 triangles),
+    data/temple.obj  -- 26 stacked and detailed axis-aligned boxes:
+                        208 vertex records, 624 UV records and 156 quad
+                        faces (fans triangulate to 312 triangles),
                         with per-face planar UVs.
     data/relief.ppm  -- 256x256 procedural sandstone texture.
     data/relief.png  -- the same texture as PNG, for the web viewer
@@ -14,9 +14,9 @@ The same three files are copied to web/data/ as well: the viewer is
 served on its own (npx serve web, GitHub Pages), so it needs the assets
 reachable from its own folder.
 
-The asset counts are pinned by the plan: 180 triangles, 120 vertices.
-15 boxes x 8 corners = 120 vertices, and 15 x 6 quad faces = 90 quads
-fan-triangulated to 180 triangles. Exactly right, with no vertex
+The asset counts: 312 triangles, 208 vertices.
+26 boxes x 8 corners = 208 vertices, and 26 x 6 quad faces = 156 quads
+fan-triangulated to 312 triangles. Exactly right, with no vertex
 duplication: OBJ decouples per-face UV indices from positions, so the
 8 shared corner positions can still carry per-face planar UVs.
 
@@ -79,18 +79,18 @@ _FACES = (
 
 
 def temple_boxes():
-    """Return the 15 boxes of the temple, bottom to top.
+    """Return the 26 boxes of the temple, bottom to top and details.
 
     Layout (heights in world units, y up from 0):
       - three receding terraces (base_1..3),
       - the body, topped by a slightly WIDER cornice molding,
       - a seven-step pyramidal roof (roof_1..7),
-      - a small spire (spire_base, spire, tip) up to y = 10.6.
+      - a small spire (spire_base, spire, tip) up to y = 10.6,
+      - 4 corner stupas on base_1 and 4 corner stupas on base_2,
+      - 3 front steps leading up the terraces on the +z side.
 
-    Every box sits exactly on the one below (top of box i equals bottom
-    of box i+1), so there are no gaps and no overlapping volumes. Shared
-    boundary planes cannot z-fight either: the two faces there have
-    opposite normals, so back-face culling always removes one of them.
+    Every box sits cleanly on the geometry below, keeping outward normals
+    and winding CCW with planar UVs.
     """
     return [
         # name        center                    half-extents
@@ -109,6 +109,20 @@ def temple_boxes():
         Box("spire_base", (0.0, 9.475, 0.0), (0.2, 0.225, 0.2)),
         Box("spire", (0.0, 9.975, 0.0), (0.12, 0.275, 0.12)),
         Box("tip", (0.0, 10.425, 0.0), (0.06, 0.175, 0.06)),
+        # 4 corner stupas on base_1 (y=0.7..1.1)
+        Box("corner_stupa_sw", (-2.7, 0.9, -2.7), (0.2, 0.2, 0.2)),
+        Box("corner_stupa_se", (2.7, 0.9, -2.7), (0.2, 0.2, 0.2)),
+        Box("corner_stupa_nw", (-2.7, 0.9, 2.7), (0.2, 0.2, 0.2)),
+        Box("corner_stupa_ne", (2.7, 0.9, 2.7), (0.2, 0.2, 0.2)),
+        # 4 corner stupas on base_2 (y=1.4..1.75)
+        Box("mid_stupa_sw", (-2.35, 1.575, -2.35), (0.16, 0.175, 0.16)),
+        Box("mid_stupa_se", (2.35, 1.575, -2.35), (0.16, 0.175, 0.16)),
+        Box("mid_stupa_nw", (-2.35, 1.575, 2.35), (0.16, 0.175, 0.16)),
+        Box("mid_stupa_ne", (2.35, 1.575, 2.35), (0.16, 0.175, 0.16)),
+        # 3 front stair steps (+z side)
+        Box("stair_1", (0.0, 0.775, 2.8), (0.6, 0.075, 0.18)),
+        Box("stair_2", (0.0, 1.475, 2.425), (0.55, 0.075, 0.16)),
+        Box("stair_3", (0.0, 2.175, 1.9), (0.5, 0.075, 0.3)),
     ]
 
 
@@ -336,8 +350,9 @@ def build(out_dir=None, seed=SEED):
 
 if __name__ == "__main__":
     obj_path, ppm_path = build()
+    boxes = temple_boxes()
     print(f"wrote {obj_path}")
-    print(f"  {15 * 8} vertices, {15 * 24} uvs, {15 * 12} triangles")
+    print(f"  {len(boxes) * 8} vertices, {len(boxes) * 24} uvs, {len(boxes) * 12} triangles")
     print(f"wrote {ppm_path}")
     print(f"wrote {ppm_path.with_suffix('.png')} (viewer copy)")
     print(f"copied the three files to {WEB_DATA_DIR} (viewer folder)")
