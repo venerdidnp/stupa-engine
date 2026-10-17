@@ -48,11 +48,11 @@ try {
 
     Write-Host "`n[6/6] Testing web server (npx serve web)..." -ForegroundColor Yellow
     $port = 39821
-    $serveProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx -y serve web -p $port" -PassThru -NoNewWindow
+    $serveProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx -y serve -l $port web" -PassThru -NoNewWindow
     Start-Sleep -Seconds 4
 
     try {
-        $uri = "http://localhost:$port/index.html"
+        $uri = "http://127.0.0.1:$port/index.html"
         $resp = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec 10
         Write-Host "HTTP Response Code: $($resp.StatusCode)" -ForegroundColor Green
         if ($resp.StatusCode -ne 200) {
