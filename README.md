@@ -89,9 +89,32 @@ setup: repository Settings -> Pages -> Source: **GitHub Actions**.
 - browser (WebGL) vs NumPy: ~40 dB PSNR, differences only at silhouette
   pixels (MSAA) -- the interior matches exactly
 - three broken scenes reproduce, each with a verified fix
+- Verified: 2026-10-17 | Windows 11 (10.0.26200) | Python 3.11.9 | NumPy 2.3.5 | Node v24.13.0 | clean clone ok
 
-## Tested on
+## Parameter Kamera (NumPy vs WebGL 512x512)
 
-- Windows 11 Home Single Language (10.0.26200), Python 3.11.9,
-  numpy 2.3.5, Pillow 12.2.0
-- headless capture (`python webshot.py`) with Chrome 155.0.8059.79
+| Parameter | Nilai | Keterangan |
+| --- | --- | --- |
+| Ukuran Framebuffer | 512 x 512 | Piksel persegi (aspect ratio 1.0) |
+| Posisi Kamera (`eye`) | `(11.0, 8.0, 11.0)` | Sudut pandang three-quarter |
+| Target Kamera (`target`) | `(0.0, 4.6, 0.0)` | Titik fokus tubuh candi |
+| Vektor Atas (`up`) | `(0.0, 1.0, 0.0)` | +y menghadap ke atas |
+| Field of View (`fovy`) | `50.0°` | Sudut pandang vertikal |
+| Aspect Ratio | `1.0` | 512 / 512 |
+| Near Plane (`near`) | `1.0` | Jarak bidang potong dekat |
+| Far Plane (`far`) | `80.0` | Jarak bidang potong jauh |
+| Arah Cahaya (`light_dir`) | `(0.35, 0.8, 0.65)` | Vektor arah menuju sumber cahaya |
+| Komposisi Pencahayaan | Ambient 0.3, Diffuse 0.7 | Model Lambertian |
+
+## Toolchain Lingkungan Pengujian
+
+| Komponen | Spesifikasi / Versi |
+| --- | --- |
+| Sistem Operasi | Windows 11 Home Single Language (10.0.26200) |
+| Python | 3.11.9 |
+| NumPy | 2.3.5 |
+| Node.js | v24.13.0 |
+| Three.js | 0.186.1 |
+| Tanggal Pengujian | 2026-10-17 |
+| Versi Browser | ISI SENDIRI |
+
