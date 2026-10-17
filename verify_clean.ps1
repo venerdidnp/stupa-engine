@@ -1,8 +1,15 @@
-# verify_clean.ps1 -- verifies clean repository clone and setup
 [CmdletBinding()]
 param(
-    [string]$Source = $PSScriptRoot
+    [string]$Source = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($Source)) {
+    if (![string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $Source = $PSScriptRoot
+    } else {
+        $Source = (Get-Location).Path
+    }
+}
 
 $ErrorActionPreference = "Stop"
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
