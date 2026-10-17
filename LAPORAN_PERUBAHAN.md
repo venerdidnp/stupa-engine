@@ -10,6 +10,7 @@
 1. `make_model.py`:
    - Memperluas pembuatan model candi dari 15 box (180 segitiga, 120 vertex) menjadi **26 box (312 segitiga, 208 vertex, 624 vt)** dengan menambahkan 4 stupa sudut pada `base_1`, 4 stupa sudut pada `base_2`, dan 3 anak tangga di sisi depan (+z).
    - Mempertahankan winding CCW dari luar dan UV planar per-face yang deterministik.
+   - Memperbarui palet dan rumus tekstur prosedural `sandstone_texture` dari corak serat kayu cokelat/kuning menjadi tekstur batuan andesit/batu alam abu-abu vulkanik dengan mottle pelapukan, grain mineral porus, dan detail permukaan batu.
    - Menyalin output aset secara otomatis ke `data/` dan `web/data/`.
 2. `tests.py`:
    - Memperbarui pengecekan jumlah vertex (208), UV (624), segitiga (312), loop pengujian winding CCW seluruh box (312), jumlah segitiga submit (312), culling flip `inside-out` ([158, 154]), dan luas foreground `stretched` (3292).
@@ -18,7 +19,9 @@
    - Menambahkan dukungan argumen `m_matrix` dan penanganan transformasi normal (direct $M$ vs inverse-transpose $(M^{-1})^T$) pada `render_scene`.
    - Menambahkan opsi interpolasi UV naif (`interp_linear`) vs perspective-correct (`interp_perspective`) pada `rasterize_triangle`.
    - Seluruh nilai default dipertahankan sehingga tidak mengubah perilaku atau output lama.
-4. `README.md`:
+4. `web/style.css`:
+   - Mengatur canvas 3D agar berada tepat di tengah (*centered*) layar viewport secara horizontal dan vertikal pada mode browser interaktif dengan tema dark slate modern dan frame halus, sembari tetap menjaga penempatan absolut (0,0) pada mode headless capture (`body.auto`) untuk kompatibilitas pengujian `webshot.py`.
+5. `README.md`:
    - Menambahkan pernyataan jujur bahwa model dibuat secara prosedural oleh `make_model.py` (bukan manual Blender).
    - Menambahkan baris verifikasi clean clone: `Verified: 2026-10-17 | Windows 11 (10.0.26200) | Python 3.11.9 | NumPy 2.3.5 | Node v24.13.0 | clean clone ok`.
    - Menambahkan tabel parameter kamera perbandingan NumPy vs WebGL 512x512.

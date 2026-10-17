@@ -271,39 +271,29 @@ def _fbm(size, fx, fy, octaves, rng):
 
 
 def sandstone_texture(size=256, seed=SEED):
-    """Generate the procedural sandstone texture.
+    """Generate the procedural andesite temple stone texture.
 
     Inputs: size -- texture edge in pixels (default 256);
             seed -- RNG seed for reproducibility.
     Output: (size, size, 3) uint8 RGB array, row 0 = top.
 
-    The look is built from four cheap ingredients, all tileable:
-      - "mottle": large-scale 5-octave fbm -- the blotchy color variation
-        of weathered stone;
-      - "bands": horizontal strata via sin() along the v axis, with the
-        mottle wobbling the band phase so the layers are not ruler-straight;
-      - "streaks": high-frequency-across / low-frequency-along fbm --
-        water streaks running down the walls;
-      - "grain": per-pixel white noise -- the fine sand speckle.
-    The combined variation multiplies a warm tan base color; channel
-    weights desaturate the darks (green/blue react a bit less) which
-    reads as dry stone rather than grey dirt.
+    Built from natural carved volcanic andesite stone characteristics:
+      - "mottle": multi-octave 5-octave fbm -- natural stone block weathering;
+      - "detail": 3-octave fbm -- subtle surface roughness and stone texture;
+      - "grain": fine mineral speckle / volcanic porous rock granules.
+    Uses a neutral natural carved stone gray/andesite tone rather than warm
+    wood-tan, giving an authentic ancient stone temple look.
     """
     rng = np.random.default_rng(seed)
 
-    mottle = _fbm(size, 4, 4, 5, rng) - 0.5          # in [-0.5, 0.5)
-    streaks = _fbm(size, 64, 8, 2, rng) - 0.5        # vertical weathering
-    grain = rng.random((size, size)) - 0.5           # per-pixel speckle
+    mottle = _fbm(size, 4, 4, 5, rng) - 0.5          # stone weathering patina
+    detail = _fbm(size, 16, 16, 3, rng) - 0.5        # rock surface roughness
+    grain = rng.random((size, size)) - 0.5           # fine porous mineral granules
 
-    # Strata: 6 bands over the tile height, phase-wobbled by the mottle
-    # (0.30 cycle of wobble keeps the lines from looking computer-straight).
-    v01 = (np.arange(size, dtype=np.float64) + 0.5) / size
-    bands = np.sin(2.0 * np.pi * (v01[:, None] * 6.0 + 0.30 * mottle))
+    variation = 0.60 * mottle + 0.25 * detail + 0.15 * grain
 
-    variation = 0.55 * mottle + 0.12 * bands + 0.20 * streaks + 0.13 * grain
-
-    base = np.array([0.804, 0.708, 0.545])    # warm sandstone tan
-    channel = np.array([1.00, 0.92, 0.80])    # keep darks warm, not grey
+    base = np.array([0.72, 0.73, 0.74])              # natural carved stone gray
+    channel = np.array([1.00, 1.00, 1.01])           # neutral cool stone
     rgb = base[None, None, :] * (1.0 + variation[:, :, None] * channel[None, None, :])
 
     return np.round(np.clip(rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
