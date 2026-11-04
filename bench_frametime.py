@@ -63,14 +63,14 @@ def main():
         make_model.build()
 
     mesh = objio.load_obj(obj_path)
-    texture = raster3d.Texture(ppm_io.read_ppm(tex_path)[2])
+    texture = ppm_io.read_ppm(tex_path)
     camera = raster3d.Camera()
 
     cpu_info = platform.processor() or platform.machine() or "Unknown CPU"
     os_info = f"{platform.system()} {platform.release()} ({platform.version()})"
     py_ver = sys.version.split()[0]
     np_ver = np.__version__
-    tri_count = len(mesh.face_vertex_indices)
+    tri_count = mesh.n_tris
 
     print("=========================================================================")
     print("BENCHMARK FRAME TIME: RASTERISATION (raster3d) vs RAY TRACING (raytrace)")

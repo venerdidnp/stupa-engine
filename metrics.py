@@ -1,96 +1,73 @@
+"""Module 1 -- image similarity metrics from scratch (NumPy only).
+
+  psnr(a, b)  : peak signal-to-noise ratio in dB (8-bit, peak 255).
+  ssim(a, b)  : a SIMPLE GLOBAL structural-similarity index (single window =
+                the whole image). The real SSIM (Wang et al. 2004) slides an
+                11x11 Gaussian window; this global version is enough to rank
+                "how different" two downscales are and is what the module
+                text quotes. Compare against skimage.metrics.ssim in an
+                Optional Extension Lab and explain the gap.
+
+Run:  python metrics.py --selftest
 """
-metrics.py -- image comparison metrics for the renderer output.
+from __future__ import annotations
 
-All functions take two RGB images of the same shape: uint8 arrays on the
-usual 0..255 scale, or float arrays expressing the same scale (the `peak`
-parameter says what "white" is; it defaults to 255).
-
-  psnr(a, b)           peak signal-to-noise ratio in dB (inf: identical)
-  ssim(a, b)           simple GLOBAL SSIM on luma, one window per frame
-  mean_abs_diff(a, b)  average |a - b| over all pixels and channels
-  max_abs_diff(a, b)   largest |a - b| anywhere ("how wrong at worst")
-  diff_image(a, b)     amplified |a - b| as a uint8 RGB image
-
-Why global SSIM: classic SSIM slides a small window and averages local
-scores. The plan asks for "a simple global SSIM", so this module uses ONE
-window covering the whole frame: blind to localized artefacts, but exactly
-what phases 4 and 7 need (a good render scores ~1, a structurally broken
-one scores far below), with no free parameters beyond the standard
-constants.
-
-Definitions (images x, y on a 0..peak scale, N = number of samples):
-  MSE  = mean((x - y)^2)
-  PSNR = 10 * log10(peak^2 / MSE)                       (inf when MSE = 0)
-  SSIM = (2*mu_x*mu_y + C1) * (2*cov_xy + C2)
-       / ((mu_x^2 + mu_y^2 + C1) * (var_x + var_y + C2))
-  C1 = (0.01*peak)^2,  C2 = (0.03*peak)^2               (standard values)
-Means, variances and the covariance are population moments (divide by N,
-ddof = 0). Colour is folded into luma with the Rec. 709 weights
-(0.2126, 0.7152, 0.0722) -- the perceptual weights sRGB itself is built
-around.
-"""
-
+import sys
 import numpy as np
 
 
-def _pair(a, b):
-    """Validate and convert two images to matching (H, W, 3) float arrays."""
-    a = np.asarray(a, dtype=np.float64)
-    b = np.asarray(b, dtype=np.float64)
-    if a.ndim != 3 or a.shape[2] != 3:
-        raise ValueError(f"metrics: expected (H, W, 3) RGB, got {a.shape}")
+def psnr(a: np.ndarray, b: np.ndarray, peak: float = 255.0) -> float:
+    a = a.astype(np.float64)
+    b = b.astype(np.float64)
     if a.shape != b.shape:
-        raise ValueError(f"metrics: shape mismatch {a.shape} vs {b.shape}")
-    return a, b
-
-
-def _luma(img):
-    """Rec. 709 luma of an RGB float image -> (H, W)."""
-    return 0.2126 * img[..., 0] + 0.7152 * img[..., 1] + 0.0722 * img[..., 2]
-
-
-def psnr(a, b, peak=255.0):
-    """Peak signal-to-noise ratio in dB (inf when the images are equal)."""
-    a, b = _pair(a, b)
-    mse = float(np.mean((a - b) ** 2))
-    if mse == 0.0:
+        raise ValueError(f"psnr: shape mismatch {a.shape} vs {b.shape}")
+    mse = np.mean((a - b) ** 2)
+    if mse == 0:
         return float("inf")
-    return 10.0 * np.log10(peak * peak / mse)
+    return float(10.0 * np.log10(peak * peak / mse))
 
 
-def ssim(a, b, peak=255.0):
-    """Simple global SSIM on luma, as defined in the module docstring."""
-    a, b = _pair(a, b)
-    x = _luma(a).ravel()
-    y = _luma(b).ravel()
-    c1 = (0.01 * peak) ** 2
-    c2 = (0.03 * peak) ** 2
-    mx, my = x.mean(), y.mean()
-    vx, vy = x.var(), y.var()                  # population moments (ddof = 0)
-    cov = float(np.mean((x - mx) * (y - my)))
-    num = (2.0 * mx * my + c1) * (2.0 * cov + c2)
-    den = (mx * mx + my * my + c1) * (vx + vy + c2)
-    return float(num / den)
+def ssim(a: np.ndarray, b: np.ndarray, L: float = 255.0) -> float:
+    a = a.astype(np.float64)
+    b = b.astype(np.float64)
+    if a.shape != b.shape:
+        raise ValueError(f"ssim: shape mismatch {a.shape} vs {b.shape}")
+    c1 = (0.01 * L) ** 2
+    c2 = (0.03 * L) ** 2
+    mu_a, mu_b = a.mean(), b.mean()
+    va, vb = a.var(), b.var()
+    cov = ((a - mu_a) * (b - mu_b)).mean()
+    return float(((2 * mu_a * mu_b + c1) * (2 * cov + c2)) /
+                 ((mu_a ** 2 + mu_b ** 2 + c1) * (va + vb + c2)))
 
 
-def mean_abs_diff(a, b):
-    """Average |a - b| over every pixel and channel."""
-    a, b = _pair(a, b)
-    return float(np.mean(np.abs(a - b)))
+def mean_abs_diff(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.mean(np.abs(a.astype(np.float64) - b.astype(np.float64))))
 
 
-def max_abs_diff(a, b):
-    """Largest |a - b| over every pixel and channel."""
-    a, b = _pair(a, b)
-    return float(np.max(np.abs(a - b)))
+def max_abs_diff(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.max(np.abs(a.astype(np.float64) - b.astype(np.float64))))
 
 
-def diff_image(a, b, gain=4.0):
-    """Amplified absolute difference as a uint8 RGB image.
+def diff_image(a: np.ndarray, b: np.ndarray, gain: float = 4.0) -> np.ndarray:
+    d = np.abs(a.astype(float) - b.astype(float))
+    return np.clip(d * gain, 0, 255).astype(np.uint8)
 
-    Inputs: a, b -- same-shape RGB images; gain -- amplification factor.
-    Output: (H, W, 3) uint8: black = identical, brighter = bigger error,
-            clipped at white (any difference of 255/gain or more saturates).
-    """
-    a, b = _pair(a, b)
-    return np.round(np.clip(np.abs(a - b) * gain, 0.0, 255.0)).astype(np.uint8)
+
+def _selftest() -> None:
+    x = (np.arange(64, dtype=np.uint8).reshape(8, 8) * 3)
+    assert psnr(x, x) == float("inf")
+    assert abs(ssim(x, x) - 1.0) < 1e-9
+
+    # a constant offset of 52 -> known PSNR
+    off = np.full((8, 8), 100, np.uint8)
+    off2 = np.full((8, 8), 152, np.uint8)
+    expect = 10 * np.log10(255 ** 2 / 52 ** 2)
+    assert abs(psnr(off, off2) - expect) < 1e-6, f"{psnr(off, off2)} vs {expect}"
+    print(f"metrics self-test OK  (psnr(equal)=inf; ssim(equal)=1; "
+          f"psnr for a 52-level shift = {expect:.2f} dB)")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv or len(sys.argv) == 1:
+        _selftest()

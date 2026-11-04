@@ -103,19 +103,14 @@ def build_floor_mesh():
     face_vertex_indices = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
     face_uv_indices = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
 
-    return objio.ObjMesh(
-        positions=positions,
-        uvs=uvs,
-        face_vertex_indices=face_vertex_indices,
-        face_uv_indices=face_uv_indices,
-    )
+    return objio.Mesh(positions, uvs, face_vertex_indices, face_uv_indices)
 
 
 def render_floor_comparison():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     mesh = build_floor_mesh()
     tex_data = create_checkerboard_texture(256, tiles=8)
-    texture = raster3d.Texture(tex_data)
+    texture = tex_data
 
     # Camera looking at the floor
     cam = raster3d.Camera(

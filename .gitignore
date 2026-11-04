@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+_tmp_selftest.*
 
 # Generated assets: the model and texture are rebuilt by make_model.py,
 # so no binary or generated data is committed to the repo. web/data/ is
@@ -8,3 +9,10 @@ __pycache__/
 data/
 web/data/
 out/
+web/temple_three.ppm
+web/*_three.ppm
+
+# Local documents
+/LAPORAN_PERUBAHAN.md
+/KUNCI_LAB1.txt
+/PLAN.md

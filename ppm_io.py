@@ -1,120 +1,106 @@
+"""Module 1 -- from-scratch PGM/PPM (Netpbm) reader and writer.
+
+Job: read and write images with NO imaging library, so the deterministic
+data set can live in Git as text-headed binary that any tool can open, and so
+the "no imaging library for the from-scratch work" rule (Practicum Module
+Plan) is literally true.
+
+Supports the binary Netpbm formats:
+  P5 = grayscale (1 channel),  P6 = RGB (3 channels), maxval 255.
+
+Reproduces: nothing numeric on its own; it is infrastructure for every other
+unit. make_data.py writes with it; histogram.py / resample.py / ... read with
+it.
+
+Run:  python ppm_io.py --selftest      # round-trips a tiny array
 """
-ppm_io.py -- read and write binary P6 PPM images.
+from __future__ import annotations
 
-The P6 format is the simplest portable RGB format there is:
-    ASCII header:  P6 <width> <height> <maxval>
-    binary raster: height x width pixels, 3 bytes (R, G, B) each,
-                   written row by row, top row first.
-
-Project conventions:
-- Images are uint8 arrays with shape (height, width, 3).
-- Row 0 is the TOP row of the image (the usual file/display convention).
-  This is exactly why the renderer flips v once when loading UVs: UVs use
-  a bottom-left origin, image storage uses a top-left origin.
-- We only write and accept maxval = 255 (8 bits per channel).
-
-Only the standard library plus NumPy is used: the header is parsed by
-hand and the raster is copied as raw bytes.
-"""
-
-from pathlib import Path
-
+import sys
 import numpy as np
 
-# Bytes that terminate a header token. A comment ('#') runs to end of line.
-_WHITESPACE = b" \t\r\n"
 
-
-def _next_token(data, pos):
-    """Return the next header token and the position just after it.
-
-    Inputs:  data -- the whole file as bytes; pos -- cursor into it.
-    Output:  (token: bytes, new_pos: int).
-    Why hand-rolled: PPM allows '#' comments between any two header
-    fields, so a plain split() is not enough; this skips whitespace AND
-    comments before every token.
-    """
-    n = len(data)
-    while pos < n:
-        ch = data[pos]
-        if ch in _WHITESPACE:
-            pos += 1
-        elif ch == 0x23:  # '#': skip to end of line
-            while pos < n and data[pos] not in b"\r\n":
-                pos += 1
-        else:
+def _read_token(f) -> bytes:
+    """Read the next whitespace-delimited token from a binary Netpbm header,
+    skipping '#' comment lines."""
+    tok = b""
+    while True:
+        ch = f.read(1)
+        if ch == b"":
             break
-    start = pos
-    while pos < n and data[pos] not in _WHITESPACE:
-        pos += 1
-    if start == pos:
-        raise ValueError("read_ppm: unexpected end of header")
-    return data[start:pos], pos
+        if ch == b"#":                       # comment to end of line
+            while ch not in (b"\n", b""):
+                ch = f.read(1)
+            continue
+        if ch.isspace():
+            if tok:
+                break
+            else:
+                continue
+        tok += ch
+    return tok
 
 
-def read_ppm(path):
-    """Load a binary P6 PPM file.
-
-    Input:  path -- file path (str or Path).
-    Output: (width, height, pixels) where pixels is a (height, width, 3)
-            uint8 array with row 0 = top row.
-
-    Why maxval must be 255: the renderer works with 8-bit channels
-    everywhere; accepting 16-bit PPMs would silently corrupt values.
-    """
-    data = Path(path).read_bytes()
-
-    magic, pos = _next_token(data, 0)
-    if magic != b"P6":
-        raise ValueError(f"read_ppm: expected P6, got {magic!r}")
-    width = int(_next_token(data, pos)[0])
-    pos = _next_token(data, pos)[1]
-    height = int(_next_token(data, pos)[0])
-    pos = _next_token(data, pos)[1]
-    maxval = int(_next_token(data, pos)[0])
-    pos = _next_token(data, pos)[1]
-
-    if maxval != 255:
-        raise ValueError(f"read_ppm: only maxval=255 supported, got {maxval}")
-    if width <= 0 or height <= 0:
-        raise ValueError(f"read_ppm: bad size {width}x{height}")
-
-    # Exactly ONE whitespace character separates the header from the
-    # raster, per the PPM spec; handle the CRLF pair as a single break.
-    if pos >= len(data) or data[pos] not in _WHITESPACE:
-        raise ValueError("read_ppm: missing whitespace after maxval")
-    if data[pos] == 0x0D and pos + 1 < len(data) and data[pos + 1] == 0x0A:
-        pos += 2
-    else:
-        pos += 1
-
-    raster = data[pos:]
-    expected = width * height * 3
-    if len(raster) != expected:
-        raise ValueError(
-            f"read_ppm: expected {expected} raster bytes, found {len(raster)}"
-        )
-    # .copy() because frombuffer returns a read-only view over `data`.
-    img = np.frombuffer(raster, dtype=np.uint8).reshape(height, width, 3).copy()
-    return width, height, img
+def read_ppm(path: str) -> np.ndarray:
+    """Return a (H, W) uint8 array for P5 or (H, W, 3) uint8 for P6."""
+    with open(path, "rb") as f:
+        magic = _read_token(f)
+        if magic not in (b"P5", b"P6"):
+            raise ValueError(f"{path}: not a binary PGM/PPM (magic={magic!r})")
+        w = int(_read_token(f))
+        h = int(_read_token(f))
+        maxval = int(_read_token(f))
+        if maxval != 255:
+            raise ValueError(f"{path}: only maxval 255 supported (got {maxval})")
+        # exactly one whitespace byte was consumed after maxval by _read_token
+        chan = 1 if magic == b"P5" else 3
+        data = np.frombuffer(f.read(w * h * chan), dtype=np.uint8)
+    if data.size != w * h * chan:
+        raise ValueError(f"{path}: truncated pixel data")
+    return data.reshape((h, w) if chan == 1 else (h, w, 3)).copy()
 
 
-def write_ppm(path, img):
-    """Write a uint8 RGB image as a binary P6 PPM file.
-
-    Inputs: path -- file path (str or Path).
-            img  -- (height, width, 3) uint8 array; row 0 is written first.
-    Output: the file on disk (return value is None).
-
-    Why ascontiguousarray: .tobytes() re-walks memory in C order, so the
-    array must be contiguous or the bytes would come out scrambled.
-    """
-    img = np.ascontiguousarray(img)
+def write_ppm(path: str, img: np.ndarray) -> int:
+    """Write a uint8 (H,W) as P5 or (H,W,3) as P6. Returns bytes written."""
+    img = np.asarray(img)
     if img.dtype != np.uint8:
-        raise ValueError(f"write_ppm: expected uint8, got {img.dtype}")
-    if img.ndim != 3 or img.shape[2] != 3:
-        raise ValueError(f"write_ppm: expected (H, W, 3), got {img.shape}")
+        raise ValueError("write_ppm expects a uint8 array (clip/round first)")
+    if img.ndim == 2:
+        magic, h, w = b"P5", img.shape[0], img.shape[1]
+    elif img.ndim == 3 and img.shape[2] == 3:
+        magic, h, w = b"P6", img.shape[0], img.shape[1]
+    else:
+        raise ValueError(f"write_ppm: bad shape {img.shape}")
+    header = magic + b"\n" + f"{w} {h}\n255\n".encode("ascii")
+    with open(path, "wb") as f:
+        f.write(header)
+        f.write(img.tobytes())
+    return len(header) + img.size
 
-    height, width = img.shape[0], img.shape[1]
-    header = f"P6\n{width} {height}\n255\n".encode("ascii")
-    Path(path).write_bytes(header + img.tobytes())
+
+def read_header(path: str) -> tuple[int, int, int]:
+    """(width, height, channels) without loading the pixels -- for budget.py."""
+    with open(path, "rb") as f:
+        magic = _read_token(f)
+        w = int(_read_token(f))
+        h = int(_read_token(f))
+        _ = _read_token(f)  # maxval
+    return w, h, (1 if magic == b"P5" else 3)
+
+
+def _selftest() -> None:
+    a = (np.arange(2 * 3 * 3).reshape(2, 3, 3) * 7).astype(np.uint8)
+    write_ppm("_tmp_selftest.ppm", a)
+    b = read_ppm("_tmp_selftest.ppm")
+    assert np.array_equal(a, b), "PPM round-trip failed"
+    g = (np.arange(4 * 4, dtype=np.uint8).reshape(4, 4) * 10)
+    write_ppm("_tmp_selftest.pgm", g)
+    assert np.array_equal(g, read_ppm("_tmp_selftest.pgm")), "PGM round-trip failed"
+    print("ppm_io self-test OK  (P5 and P6 round-trip)")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        _selftest()
+    else:
+        print(__doc__)

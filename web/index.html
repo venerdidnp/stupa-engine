@@ -1,29 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>stupa-engine -- Three.js viewer</title>
-<link rel="stylesheet" href="style.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pusaka3D &mdash; Module 3: Textured Temple (Three.js)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #12121a; color: #e8e8ef; }
+  header { padding: .6rem 1rem; background: #1c1c28; border-bottom: 1px solid #333; }
+  header h1 { font-size: 1rem; margin: 0; }
+  header p { margin: .25rem 0 0; font-size: .8rem; color: #a8a8b8; }
+  #wrap { padding: 1rem; }
+  canvas { border: 1px solid #333; display: block; }
+  button { font: inherit; padding: .3rem .7rem; margin: .6rem .4rem 0 0; }
+  .hint { font-size: .78rem; color: #999; max-width: 520px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 </head>
 <body>
-  <div id="app"></div>
-  <div id="panel">
-    <strong>stupa-engine</strong><br>
-    drag to orbit &middot; wheel to zoom<br>
-    <button id="export">Export PPM</button>
-    <div id="status"></div>
+<header>
+  <h1>Pusaka3D &mdash; Textured Temple, real-time (Module 3)</h1>
+  <p>The SAME <code>data/pusaka_model.obj</code> + <code>data/relief.ppm</code> that
+     <code>raster3d.py</code> and <code>raytrace.py</code> render from scratch.
+     Three.js does the MVP stack, the w-divide, the z-buffer, and
+     perspective-correct texturing on the GPU. Drag to orbit.</p>
+</header>
+<div id="wrap">
+  <canvas id="c" width="512" height="512"></canvas>
+  <div style="margin-top: .6rem;">
+    <label for="model-select" style="font-size: .85rem; margin-right: .4rem;">Model:</label>
+    <select id="model-select" style="font: inherit; padding: .2rem .4rem; margin-right: .6rem; background: #222; color: #fff; border: 1px solid #444;">
+      <option value="pusaka_model.obj">Candi Pusaka (180 tris &mdash; Baseline)</option>
+      <option value="mymodel.obj">Candi Bertingkat (312 tris &mdash; Lab 1)</option>
+    </select>
+    <button id="export">Export PPM (512&times;512)</button>
+    <button id="wire">Toggle wireframe</button>
   </div>
-
-  <!-- Pinned Three.js version from a CDN; the addons resolve through the
-       "three/addons/" prefix, the standard Three.js importmap layout. -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.186.1/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.186.1/examples/jsm/"
-    }
-  }
-  </script>
-  <script type="module" src="./viewer.js"></script>
+  <p class="hint">Export at the <em>same</em> camera as your NumPy render, then
+     <code>python compare.py out/temple_raster.ppm web/temple_three.ppm</code> &mdash;
+     expect ~30&nbsp;dB with the residual on anti-aliased silhouette edges, not
+     in the interior (a transform bug would shift a whole region).</p>
+</div>
+<script type="module" src="viewer.js"></script>
 </body>
 </html>

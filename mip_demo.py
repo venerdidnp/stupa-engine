@@ -49,7 +49,7 @@ def main():
         make_model.build()
 
     mesh = objio.load_obj(obj_path)
-    texture = raster3d.Texture(ppm_io.read_ppm(tex_path)[2])
+    texture = raster3d.Texture(ppm_io.read_ppm(tex_path))
 
     # Far camera: scale eye distance by 3x away from target (0, 4.6, 0)
     # Default: eye=(11.0, 8.0, 11.0), target=(0.0, 4.6, 0.0)

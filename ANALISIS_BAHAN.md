@@ -10,10 +10,10 @@ Dokumen ini hanya bahan. Bagian bertanda [TULIS SENDIRI] harus diisi mahasiswa d
 Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/KUNCI_LAB1.txt)
 
 - **Parameter Kamera**:
-  - Eye: `[11.0, 8.0, 11.0]`
-  - Target: `[0.0, 4.6, 0.0]`
+  - Eye: `[2.6, 2.0, 3.4]`
+  - Target: `[0.0, 0.7, 0.0]`
   - Up: `[0.0, 1.0, 0.0]`
-  - FOV: `50.0°`, Near: `1.0`, Far: `80.0`
+  - FOV: `45.0°`, Near: `1.0`, Far: `14.0`
   - Viewport: `800 x 600`
 - **Matriks M (Model Matrix)**:
   ```
@@ -24,16 +24,16 @@ Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/K
   ```
 - **Matriks V (View Matrix)**:
   ```
-  [  0.707107   0.000000  -0.707107  -0.000000 ]
-  [ -0.150981   0.976939  -0.150981  -4.493918 ]
-  [  0.690800   0.213520   0.690800 -16.905759 ]
+  [  0.794358   0.000000  -0.607450   0.000000 ]
+  [ -0.176535   0.956840  -0.230853  -0.669788 ]
+  [  0.581232   0.290616   0.760073  -4.676685 ]
   [  0.000000   0.000000   0.000000   1.000000 ]
   ```
 - **Matriks P (Projection Matrix)**:
   ```
-  [  1.608380   0.000000   0.000000   0.000000 ]
-  [  0.000000   2.144507   0.000000   0.000000 ]
-  [  0.000000   0.000000  -1.025316  -2.025316 ]
+  [  1.810660   0.000000   0.000000   0.000000 ]
+  [  0.000000   2.414214   0.000000   0.000000 ]
+  [  0.000000   0.000000  -1.153846  -2.153846 ]
   [  0.000000   0.000000  -1.000000   0.000000 ]
   ```
 - **Baca Kolom M**:
@@ -42,17 +42,17 @@ Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/K
   - Arah +y model `(0,1,0,0)` $\rightarrow$ `[0.000, 1.000, 0.000, 0.000]`
   - Arah +z model `(0,0,1,0)` $\rightarrow$ `[0.000, 0.000, 1.000, 0.000]`
 - **Baca Kolom V**:
-  - Origin world `(0,0,0,1)` $\rightarrow$ `[-0.000, -4.494, -16.906, 1.000]`
-  - Arah +x world `(1,0,0,0)` $\rightarrow$ `[0.707, -0.151, 0.691, 0.000]`
-  - Arah +y world `(0,1,0,0)` $\rightarrow$ `[0.000, 0.977, 0.214, 0.000]`
-  - Arah +z world `(0,0,1,0)` $\rightarrow$ `[-0.707, -0.151, 0.691, 0.000]`
+  - Origin world `(0,0,0,1)` $\rightarrow$ `[0.000, -0.670, -4.677, 1.000]`
+  - Arah +x world `(1,0,0,0)` $\rightarrow$ `[0.794, -0.177, 0.581, 0.000]`
+  - Arah +y world `(0,1,0,0)` $\rightarrow$ `[0.000, 0.957, 0.291, 0.000]`
+  - Arah +z world `(0,0,1,0)` $\rightarrow$ `[-0.607, -0.231, 0.760, 0.000]`
 - **Telusuran Koordinat Vertex 0**:
-  - 1. Object Space : `[-3.000, 0.000, -3.000, 1.000]`
-  - 2. World Space  : `[-3.000, 0.000, -3.000, 1.000]`
-  - 3. View Space   : `[-0.000, -3.588, -21.051, 1.000]`
-  - 4. Clip Space   : `[-0.000, -7.695, 19.558, 21.051]`
-  - 5. NDC Space    : `[-0.000, -0.366, 0.929]`
-  - 6. Screen Space : pixel x = `400.000`, y = `409.658`, depth01 = `0.965`
+  - 1. Object Space : `[-1.200, 0.000, -1.200, 1.000]`
+  - 2. World Space  : `[-1.200, 0.000, -1.200, 1.000]`
+  - 3. View Space   : `[-0.224, -0.181, -6.286, 1.000]`
+  - 4. Clip Space   : `[-0.406, -0.437, 5.100, 6.286]`
+  - 5. NDC Space    : `[-0.065, -0.069, 0.811]`
+  - 6. Screen Space : pixel x = `374.159`, y = `320.845`, depth01 = `0.811`
 
 ### 2. Angka Worked Example (`worked_example.py`)
 - Titik uji input: `p = (2.0, 3.0, 4.0, 1.0)`
@@ -102,7 +102,7 @@ Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/K
 - **Sebaran Perbedaan**: Semua perbedaan berada tepat di tepi siluet (dalam radius 2 piksel dari tepi warna akibat antialiasing MSAA pada canvas WebGL browser; bagian interior model identik).
 
 ### 4. Ketersediaan File Referensi
-- **Catatan**: File `ref/temple_ref.ppm` **TIDAK TERSEDIA** di dalam repositori.
+- **Status ref/temple_ref.ppm**: Tersedia di folder `ref/` (terverifikasi byte-identical pada re-render, PSNR = inf dB).
 
 ---
 
@@ -110,9 +110,9 @@ Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/K
 
 | Kasus Bug | Perintah Eksekusi | Metrik Sebelum Perbaikan | Metrik Sesudah Perbaikan | File Bukti Gambar | DIAGNOSIS PRA-PERBAIKAN | PITFALL §12 YANG TERKAIT |
 | --- | --- | --- | --- | --- | --- | --- |
-| **Inside-Out (Winding Terbalik)** | `python broken_scene.py --bug inside-out` | Culled: 154 segitiga<br>Probe depth: 0.957580<br>PSNR: 11.23 dB<br>SSIM: 0.742308 | Culled: 158 segitiga<br>Probe depth: 0.945443<br>PSNR: inf dB<br>SSIM: 1.000000<br>(0 piksel beda) | `out/broken_inside-out.png`<br>`out/broken_inside-out_diff.png` | [TULIS SENDIRI] | [TULIS SENDIRI] |
-| **Z-Fight (Near Plane 1e-3)** | `python broken_scene.py --bug zfight` | Depth codes 8-bit: 1 kode (254)<br>Depth codes 16-bit: 3 dari 65536 kode<br>Flicker (dither 0.5 LSB): 398 piksel<br>PSNR: 29.80 dB<br>SSIM: 0.993072 | Depth codes 8-bit: 4 kode (241..244)<br>Flicker pada near=1.0: 0 piksel<br>PSNR: inf dB<br>SSIM: 1.000000<br>(0 piksel beda) | `out/broken_zfight.png`<br>`out/broken_zfight_diff.png` | [TULIS SENDIRI] | [TULIS SENDIRI] |
-| **Stretched (Matriks V @ P)** | `python broken_scene.py --bug stretched` | Covered pixels: 19.200 (100% frame)<br>PSNR: 8.78 dB<br>SSIM: 0.158564 | Covered pixels: 3.292 piksel<br>PSNR: inf dB<br>SSIM: 1.000000<br>(0 piksel beda) | `out/broken_stretched.png`<br>`out/broken_stretched_diff.png` | [TULIS SENDIRI] | [TULIS SENDIRI] |
+| **Inside-Out (Winding Terbalik)** | `python broken_scene.py --bug inside-out` | Culled: 154 segitiga<br>Fragments: 31059<br>PSNR: 14.3 dB<br>SSIM: 0.790 | Culled: 158 segitiga<br>Fragments: 33445<br>PSNR: inf dB<br>SSIM: 1.000000 | `out/bug_inside-out_bad.ppm`<br>`out/bug_inside-out_fixed.ppm` | [TULIS SENDIRI] | §12.6 Drift konvensi winding / backface |
+| **Z-Fight (Near Plane 1e-3)** | `python broken_scene.py --bug zfight` | Wrong pixels (16-bit depth): 2852 piksel<br>PSNR: 16.7 dB<br>SSIM: 0.779 | Wrong pixels (near=1.0): 184 piksel<br>PSNR: inf dB<br>SSIM: 1.000000 | `out/bug_zfight_bad.ppm`<br>`out/bug_zfight_fixed.ppm` | [TULIS SENDIRI] | §12.2 Near plane terlalu kecil |
+| **Stretched (Matriks V @ P)** | `python broken_scene.py --bug stretched` | Matriks model terdistorsi non-uniform<br>PSNR: 11.5 dB<br>SSIM: 0.594 | Model matrix terestorasi normal<br>PSNR: inf dB<br>SSIM: 1.000000 | `out/bug_stretched_bad.ppm`<br>`out/bug_stretched_fixed.ppm` | [TULIS SENDIRI] | §12.1 Urutan perkalian matriks |
 
 ---
 

@@ -79,9 +79,9 @@ def measure_culling(mesh, texture, camera):
 
 
 def measure_normal_matrix(mesh, texture, camera):
-    M_aligned = scale(1.0, 3.0, 1.0)
+    M_aligned = scale((1.0, 3.0, 1.0))
     from transforms import rot_z
-    M_tilted = scale(1.0, 3.0, 1.0) @ rot_z(30.0)
+    M_tilted = scale((1.0, 3.0, 1.0)) @ rot_z(30.0)
 
     # Use flat Lambert shading with flat color to highlight normal differences
     cfg_wrong = raster3d.RenderSettings(
@@ -159,7 +159,7 @@ def main():
         make_model.build()
 
     mesh = objio.load_obj(obj_path)
-    texture = raster3d.Texture(ppm_io.read_ppm(tex_path)[2])
+    texture = ppm_io.read_ppm(tex_path)
     camera = raster3d.Camera()
 
     cull_results = measure_culling(mesh, texture, camera)

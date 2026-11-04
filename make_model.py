@@ -1,349 +1,176 @@
+"""Module 3 -- deterministic Pusaka3D temple: a stacked-tier candi.
+
+No RNG, no binary assets in Git. Writes:
+  data/pusaka_model.obj   180 triangles (15 stacked boxes, planar-projected UVs)
+  data/relief.ppm         256x256 procedural sandstone texture (Module 1 style)
+  data/mymodel.obj        312 triangles (26 boxes: student custom candi with corner stupas & stairs)
+
+Run:  python make_model.py [--out data]
 """
-make_model.py -- generates the stepped temple assets, deterministically.
+from __future__ import annotations
 
-Running this file writes:
-    data/temple.obj  -- 26 stacked and detailed axis-aligned boxes:
-                        208 vertex records, 624 UV records and 156 quad
-                        faces (fans triangulate to 312 triangles),
-                        with per-face planar UVs.
-    data/relief.ppm  -- 256x256 procedural sandstone texture.
-    data/relief.png  -- the same texture as PNG, for the web viewer
-                        (browsers cannot decode PPM).
-
-The same three files are copied to web/data/ as well: the viewer is
-served on its own (npx serve web, GitHub Pages), so it needs the assets
-reachable from its own folder.
-
-The asset counts: 312 triangles, 208 vertices.
-26 boxes x 8 corners = 208 vertices, and 26 x 6 quad faces = 156 quads
-fan-triangulated to 312 triangles. Exactly right, with no vertex
-duplication: OBJ decouples per-face UV indices from positions, so the
-8 shared corner positions can still carry per-face planar UVs.
-
-The texture is wrapping value noise (fbm), so it tiles seamlessly when
-the UVs run past 0..1. A fixed RNG seed makes both files byte-identical
-on every machine, which keeps the renders comparable.
-
-Run:  python make_model.py
-"""
-
+import argparse
+import os
 import shutil
-from collections import namedtuple
-from pathlib import Path
 
 import numpy as np
 
-import ppm_io
-
-# Fixed RNG seed: the assets must be reproducible byte for byte.
-SEED = 12345
-
-# One full texture tile spans this many world units along a UV axis.
-# 1/3 means the 256px texture covers a 3x3 world-unit patch, so the
-# 6-unit-wide base shows two repeats of the pattern.
-UV_SCALE = 1.0 / 3.0
-
-# Where the generated files go (script-relative so the working
-# directory does not matter).
-DATA_DIR = Path(__file__).resolve().parent / "data"
-
-# Where the viewer looks for its assets when it is served on its own
-# (npx serve web, GitHub Pages); build() copies them here.
-WEB_DATA_DIR = Path(__file__).resolve().parent / "web" / "data"
-
-# A box: axis-aligned, described by its center and half-extents.
-Box = namedtuple("Box", ["name", "center", "half"])
-
-# The six faces of a box, each as (quad corner indices, u_axis, v_axis).
-# Corner index bits: 4*ix + 2*iy + iz with ix/iy/iz = 0 for
-# negative half-extent, 1 for positive (see _box_corners).
-# Facts to know about every entry:
-#   - the quad order is CCW when viewed from OUTSIDE the box;
-#   - (u_axis, v_axis) is right-handed on the face: u x v = outward
-#     normal, which keeps the texture unmirrored when looked at from
-#     outside and matches the CCW winding.
-_FACES = (
-    # left   (-x): right when viewed from -x is +z
-    ((1, 3, 2, 0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
-    # right  (+x): right when viewed from +x is -z
-    ((5, 4, 6, 7), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),
-    # front  (+z): right is +x
-    ((1, 5, 7, 3), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
-    # back   (-z): right when viewed from -z is -x
-    ((0, 2, 6, 4), (-1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
-    # top    (+y): right is +x, texture "up" points to -z
-    ((3, 7, 6, 2), (1.0, 0.0, 0.0), (0.0, 0.0, -1.0)),
-    # bottom (-y): right is +x, texture "up" points to +z
-    ((0, 4, 5, 1), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
-)
+from objio import save_obj
+from ppm_io import write_ppm
+from srgb import linear_to_srgb, to_u8
 
 
-def temple_boxes():
-    """Return the 26 boxes of the temple, bottom to top and details.
+def box(cx, cz, half_x, y0, y1, half_z=None):
+    """Axis-aligned box, centre (cx,*,cz), horizontal half-size (half_x, half_z),
+    vertical span y0..y1. Returns (8 positions, 12 triangles (as local idx),
+    per-face-vertex uvs). CCW-front (outward-facing)."""
+    if half_z is None:
+        half_z = half_x
+    x0, x1 = cx - half_x, cx + half_x
+    z0, z1 = cz - half_z, cz + half_z
+    P = np.array([
+        [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1],   # bottom 0..3
+        [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1],   # top    4..7
+    ])
+    # each face: 2 triangles, wound CCW seen from outside
+    faces = [
+        (4, 5, 6), (4, 6, 7),        # +y top
+        (0, 2, 1), (0, 3, 2),        # -y bottom
+        (0, 1, 5), (0, 5, 4),        # -z front
+        (2, 3, 7), (2, 7, 6),        # +z back
+        (3, 0, 4), (3, 4, 7),        # -x left
+        (1, 2, 6), (1, 6, 5),        # +x right
+    ]
+    # simple planar UVs: project each vertex onto x-y, scaled into [0,1] per box
+    uv = np.c_[(P[:, 0] - x0) / max(2 * half_x, 1e-6),
+               (P[:, 1] - y0) / max(y1 - y0, 1e-6)]
+    face_uv = [(a, b, c) for (a, b, c) in faces]
+    return P, faces, uv, face_uv
 
-    Layout (heights in world units, y up from 0):
-      - three receding terraces (base_1..3),
-      - the body, topped by a slightly WIDER cornice molding,
-      - a seven-step pyramidal roof (roof_1..7),
-      - a small spire (spire_base, spire, tip) up to y = 10.6,
-      - 4 corner stupas on base_1 and 4 corner stupas on base_2,
-      - 3 front steps leading up the terraces on the +z side.
 
-    Every box sits cleanly on the geometry below, keeping outward normals
-    and winding CCW with planar UVs.
-    """
-    return [
-        # name        center                    half-extents
-        Box("base_1", (0.0, 0.35, 0.0), (3.0, 0.35, 3.0)),
-        Box("base_2", (0.0, 1.05, 0.0), (2.6, 0.35, 2.6)),
-        Box("base_3", (0.0, 1.75, 0.0), (2.25, 0.35, 2.25)),
-        Box("body", (0.0, 3.4, 0.0), (1.6, 1.3, 1.6)),
-        Box("cornice", (0.0, 4.925, 0.0), (1.95, 0.225, 1.95)),
-        Box("roof_1", (0.0, 5.475, 0.0), (1.65, 0.325, 1.65)),
-        Box("roof_2", (0.0, 6.125, 0.0), (1.4, 0.325, 1.4)),
-        Box("roof_3", (0.0, 6.775, 0.0), (1.15, 0.325, 1.15)),
-        Box("roof_4", (0.0, 7.425, 0.0), (0.9, 0.325, 0.9)),
-        Box("roof_5", (0.0, 8.025, 0.0), (0.675, 0.275, 0.675)),
-        Box("roof_6", (0.0, 8.55, 0.0), (0.475, 0.25, 0.475)),
-        Box("roof_7", (0.0, 9.025, 0.0), (0.3, 0.225, 0.3)),
-        Box("spire_base", (0.0, 9.475, 0.0), (0.2, 0.225, 0.2)),
-        Box("spire", (0.0, 9.975, 0.0), (0.12, 0.275, 0.12)),
-        Box("tip", (0.0, 10.425, 0.0), (0.06, 0.175, 0.06)),
-        # 4 corner stupas on base_1 (y=0.7..1.1)
-        Box("corner_stupa_sw", (-2.7, 0.9, -2.7), (0.2, 0.2, 0.2)),
-        Box("corner_stupa_se", (2.7, 0.9, -2.7), (0.2, 0.2, 0.2)),
-        Box("corner_stupa_nw", (-2.7, 0.9, 2.7), (0.2, 0.2, 0.2)),
-        Box("corner_stupa_ne", (2.7, 0.9, 2.7), (0.2, 0.2, 0.2)),
-        # 4 corner stupas on base_2 (y=1.4..1.75)
-        Box("mid_stupa_sw", (-2.35, 1.575, -2.35), (0.16, 0.175, 0.16)),
-        Box("mid_stupa_se", (2.35, 1.575, -2.35), (0.16, 0.175, 0.16)),
-        Box("mid_stupa_nw", (-2.35, 1.575, 2.35), (0.16, 0.175, 0.16)),
-        Box("mid_stupa_ne", (2.35, 1.575, 2.35), (0.16, 0.175, 0.16)),
-        # 3 front stair steps (+z side)
-        Box("stair_1", (0.0, 0.775, 2.8), (0.6, 0.075, 0.18)),
-        Box("stair_2", (0.0, 1.475, 2.425), (0.55, 0.075, 0.16)),
-        Box("stair_3", (0.0, 2.175, 1.9), (0.5, 0.075, 0.3)),
+def build_temple():
+    """Official 15-box reference temple (180 triangles, 120 vertices)."""
+    positions, faces, uvs, face_uvs = [], [], [], []
+    voff = 0
+    # 7 stacked tiers, shrinking; a finial box on top
+    tiers = [(0.0, 0.0, 1.00, 0.00, 0.35),
+             (0.0, 0.0, 0.82, 0.35, 0.62),
+             (0.0, 0.0, 0.66, 0.62, 0.85),
+             (0.0, 0.0, 0.50, 0.85, 1.05),
+             (0.0, 0.0, 0.34, 1.05, 1.22),
+             (0.0, 0.0, 0.20, 1.22, 1.36),
+             (0.0, 0.0, 0.07, 1.36, 1.52)]
+    # four corner shrines (small boxes)
+    for (sx, sz) in [(-0.8, -0.8), (0.8, -0.8), (-0.8, 0.8), (0.8, 0.8)]:
+        tiers.append((sx, sz, 0.16, 0.0, 0.30))
+        tiers.append((sx, sz, 0.10, 0.30, 0.44))
+    for (cx, cz, half, y0, y1) in tiers:
+        P, F, uv, fuv = box(cx, cz, half, y0, y1)
+        for (a, b, c) in F:
+            faces.append((a + voff, b + voff, c + voff))
+        for (a, b, c) in fuv:
+            face_uvs.append((a + voff, b + voff, c + voff))
+        positions.extend(P.tolist())
+        uvs.extend(uv.tolist())
+        voff += len(P)
+    return np.array(positions), np.array(uvs), faces, face_uvs
+
+
+def build_custom_model():
+    """Student custom candi model (26 boxes = 312 triangles, 208 vertices).
+    Fulfills Lab 1 requirement: custom model >= 200 triangles."""
+    positions, faces, uvs, face_uvs = [], [], [], []
+    voff = 0
+
+    # 15 central stacked boxes (base terraces, body, roof, spire)
+    boxes_def = [
+        # (cx, cz, hx, y0, y1, hz)
+        (0.0, 0.0, 1.20, 0.00, 0.25, 1.20),   # base_1
+        (0.0, 0.0, 1.05, 0.25, 0.50, 1.05),   # base_2
+        (0.0, 0.0, 0.90, 0.50, 0.75, 0.90),   # base_3
+        (0.0, 0.0, 0.70, 0.75, 1.20, 0.70),   # body
+        (0.0, 0.0, 0.78, 1.20, 1.30, 0.78),   # cornice
+        (0.0, 0.0, 0.65, 1.30, 1.45, 0.65),   # roof_1
+        (0.0, 0.0, 0.55, 1.45, 1.60, 0.55),   # roof_2
+        (0.0, 0.0, 0.45, 1.60, 1.73, 0.45),   # roof_3
+        (0.0, 0.0, 0.35, 1.73, 1.85, 0.35),   # roof_4
+        (0.0, 0.0, 0.27, 1.85, 1.95, 0.27),   # roof_5
+        (0.0, 0.0, 0.20, 1.95, 2.03, 0.20),   # roof_6
+        (0.0, 0.0, 0.14, 2.03, 2.10, 0.14),   # roof_7
+        (0.0, 0.0, 0.10, 2.10, 2.18, 0.10),   # spire_base
+        (0.0, 0.0, 0.06, 2.18, 2.26, 0.06),   # spire
+        (0.0, 0.0, 0.03, 2.26, 2.32, 0.03),   # tip
     ]
 
+    # 4 corner stupas on base_1 (outer terrace corners)
+    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]:
+        boxes_def.append((sx, sz, 0.12, 0.25, 0.45, 0.12))
 
-def _box_corners(box):
-    """Return the 8 corners of a box as a (8, 3) float64 array.
+    # 4 corner stupas on base_2 (middle terrace corners)
+    for (sx, sz) in [(-0.85, -0.85), (0.85, -0.85), (-0.85, 0.85), (0.85, 0.85)]:
+        boxes_def.append((sx, sz, 0.09, 0.50, 0.68, 0.09))
 
-    Corner index encoding: bit 2 = x side, bit 1 = y side, bit 0 = z
-    side, where a set bit means the POSITIVE half-extent:
-        index 0 = (-x, -y, -z) ... index 7 = (+x, +y, +z).
-    This fixed encoding is what the corner tables in _FACES rely on.
-    """
-    cx, cy, cz = box.center
-    hx, hy, hz = box.half
-    return np.array(
-        [
-            [cx - hx, cy - hy, cz - hz],
-            [cx - hx, cy - hy, cz + hz],
-            [cx - hx, cy + hy, cz - hz],
-            [cx - hx, cy + hy, cz + hz],
-            [cx + hx, cy - hy, cz - hz],
-            [cx + hx, cy - hy, cz + hz],
-            [cx + hx, cy + hy, cz - hz],
-            [cx + hx, cy + hy, cz + hz],
-        ],
-        dtype=np.float64,
-    )
+    # 3 front steps leading up on +z face
+    boxes_def.append((0.0, 1.30, 0.25, 0.00, 0.08, 0.10))
+    boxes_def.append((0.0, 1.20, 0.22, 0.08, 0.16, 0.10))
+    boxes_def.append((0.0, 1.10, 0.19, 0.16, 0.25, 0.10))
 
-
-def _write_obj(path, boxes):
-    """Write the boxes as an OBJ file with per-face planar UVs.
-
-    Planar UVs: each face projects its corners onto its own 2D frame
-    (u_axis, v_axis from _FACES) measured in WORLD units, times
-    UV_SCALE. Sharing one projection per face (instead of an arbitrary
-    global plane) keeps the grain unstretched on the walls and on the
-    roofs alike, and since the boxes are axis-aligned the projection is
-    exact - no distortion at all, just a uniform texel/unit scale.
-
-    The vt records are emitted per face (24 per box): position and UV
-    indices are separate in OBJ, so the 8 shared corner positions can
-    legally carry 4 different UVs each, one per adjacent face.
-    """
-    lines = [
-        "# stupa-engine stepped temple",
-        f"# generated by make_model.py -- {len(boxes)} boxes, "
-        f"{8 * len(boxes)} vertices, {12 * len(boxes)} triangles",
-        "",
-    ]
-    vertex_base = 0  # 0-based index of this box's first vertex
-    uv_base = 0      # 0-based index of this box's first uv
-    for box in boxes:
-        lines.append(f"o {box.name}")
-        corners = _box_corners(box)
-
-        # 8 position records for this box.
-        for corner in corners:
-            lines.append(f"v {corner[0]:.6f} {corner[1]:.6f} {corner[2]:.6f}")
-
-        # 24 uv records: 4 per face, in the face's quad corner order.
-        for quad, u_axis, v_axis in _FACES:
-            for corner_index in quad:
-                p = corners[corner_index]
-                u = float(np.dot(p, u_axis)) * UV_SCALE
-                v = float(np.dot(p, v_axis)) * UV_SCALE
-                lines.append(f"vt {u:.6f} {v:.6f}")
-
-        # 6 quad faces, each referencing (vertex, uv) pairs.
-        for face_index, (quad, _, _) in enumerate(_FACES):
-            corner_tokens = []
-            for j, corner_index in enumerate(quad):
-                v_index = vertex_base + corner_index + 1  # OBJ is 1-based
-                vt_index = uv_base + 4 * face_index + j + 1
-                corner_tokens.append(f"{v_index}/{vt_index}")
-            lines.append("f " + " ".join(corner_tokens))
-
-        vertex_base += 8
-        uv_base += 24
-
-    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for item in boxes_def:
+        cx, cz, hx, y0, y1, hz = item
+        P, F, uv, fuv = box(cx, cz, hx, y0, y1, hz)
+        for (a, b, c) in F:
+            faces.append((a + voff, b + voff, c + voff))
+        for (a, b, c) in fuv:
+            face_uvs.append((a + voff, b + voff, c + voff))
+        positions.extend(P.tolist())
+        uvs.extend(uv.tolist())
+        voff += len(P)
+    return np.array(positions), np.array(uvs), faces, face_uvs
 
 
-def _value_noise(size, fx, fy, rng):
-    """One octave of value noise on a size x size grid, wrapping at edges.
-
-    Inputs: size -- texture edge in pixels (square);
-            fx, fy -- lattice cells across the texture (must divide size);
-            rng -- numpy Generator (random lattice values in [0, 1)).
-    Output: (size, size) float64 array in [0, 1).
-
-    Why wrapping lattices: the noise must tile, because UVs run past
-    0..1 and the sampler repeats the texture. Sampling the lattice with
-    index % fx / % fy makes the left edge blend into the right edge, so
-    no seam appears at tile boundaries.
-    Why smootherstep (3t^2 - 2t^3) instead of linear interpolation: it
-    makes the interpolated gradient zero at every lattice node, so the
-    cells join without visible creases.
-    """
-    if size % fx or size % fy:
-        raise ValueError(f"lattice {fx}x{fy} must divide texture size {size}")
-
-    lattice = rng.random((fy, fx))
-
-    # Sample positions in lattice units along each axis.
-    xs = np.arange(size) * (fx / size)
-    ys = np.arange(size) * (fy / size)
-    x0 = np.floor(xs).astype(np.int64)
-    y0 = np.floor(ys).astype(np.int64)
-    tx = xs - x0
-    ty = ys - y0
-
-    # Wrapped lattice indices: cell fx wraps back to cell 0, etc.
-    x0w, x1w = x0 % fx, (x0 + 1) % fx
-    y0w, y1w = y0 % fy, (y0 + 1) % fy
-
-    tx = tx * tx * (3.0 - 2.0 * tx)
-    ty = ty * ty * (3.0 - 2.0 * ty)
-
-    # Bilinear blend of the four lattice corners around each sample.
-    n00 = lattice[np.ix_(y0w, x0w)]
-    n10 = lattice[np.ix_(y0w, x1w)]
-    n01 = lattice[np.ix_(y1w, x0w)]
-    n11 = lattice[np.ix_(y1w, x1w)]
-    nx0 = n00 + (n10 - n00) * tx[None, :]
-    nx1 = n01 + (n11 - n01) * tx[None, :]
-    return nx0 + (nx1 - nx0) * ty[:, None]
+def relief_texture(n=256):
+    """Procedural sandstone relief -- matches Module 1 and reference frame."""
+    y, x = np.mgrid[0:n, 0:n].astype(np.float64)
+    fx = 0.22
+    raw = np.sin(2 * np.pi * fx * (x + 0.5 * y))
+    ridges = 0.5 + 0.40 * np.tanh(2.5 * raw)
+    slow = 0.10 * np.sin(2 * np.pi * 0.02 * x) * np.cos(2 * np.pi * 0.015 * y)
+    lum = np.clip(ridges + slow, 0.05, 0.98)
+    lum[int(0.33 * n):int(0.37 * n), :] *= 0.6      # a carved band
+    tint = (1.00, 0.82, 0.60)
+    lin = np.dstack([lum * tint[0], lum * tint[1], lum * tint[2]])
+    return to_u8(linear_to_srgb(np.clip(lin, 0, 1)))
 
 
-def _fbm(size, fx, fy, octaves, rng):
-    """Fractal noise: octaves of _value_noise with halving amplitude.
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="data")
+    args = ap.parse_args()
+    os.makedirs(args.out, exist_ok=True)
 
-    Each octave doubles the lattice frequency (fx, fy must still divide
-    `size`, which holds whenever the starting values do) and adds half
-    the previous amplitude, giving the usual 1/f look. Dividing by the
-    summed amplitude keeps the result in [0, 1).
-    """
-    total = np.zeros((size, size), dtype=np.float64)
-    amplitude = 1.0
-    norm = 0.0
-    for _ in range(octaves):
-        total += amplitude * _value_noise(size, fx, fy, rng)
-        norm += amplitude
-        amplitude *= 0.5
-        fx *= 2
-        fy *= 2
-    return total / norm
+    # 1. Official reference model (180 tris)
+    pos, uvs, faces, fuvs = build_temple()
+    save_obj(os.path.join(args.out, "pusaka_model.obj"), pos, uvs, faces, fuvs)
+    print(f"wrote {os.path.join(args.out, 'pusaka_model.obj')}  ({len(pos)} verts, {len(faces)} triangles)")
 
+    # 2. Student custom model for Lab 1 (312 tris >= 200 tris)
+    c_pos, c_uvs, c_faces, c_fuvs = build_custom_model()
+    save_obj(os.path.join(args.out, "mymodel.obj"), c_pos, c_uvs, c_faces, c_fuvs)
+    save_obj(os.path.join(args.out, "temple.obj"), c_pos, c_uvs, c_faces, c_fuvs)
+    print(f"wrote {os.path.join(args.out, 'mymodel.obj')}  ({len(c_pos)} verts, {len(c_faces)} triangles - Lab 1 custom model)")
 
-def sandstone_texture(size=256, seed=SEED):
-    """Generate the procedural andesite temple stone texture.
+    # 3. Texture
+    tex = relief_texture()
+    tex_path = os.path.join(args.out, "relief.ppm")
+    write_ppm(tex_path, tex)
+    print(f"wrote {tex_path}  (256x256, {os.path.getsize(tex_path)} bytes)")
 
-    Inputs: size -- texture edge in pixels (default 256);
-            seed -- RNG seed for reproducibility.
-    Output: (size, size, 3) uint8 RGB array, row 0 = top.
-
-    Built from natural carved volcanic andesite stone characteristics:
-      - "mottle": multi-octave 5-octave fbm -- natural stone block weathering;
-      - "detail": 3-octave fbm -- subtle surface roughness and stone texture;
-      - "grain": fine mineral speckle / volcanic porous rock granules.
-    Uses a neutral natural carved stone gray/andesite tone rather than warm
-    wood-tan, giving an authentic ancient stone temple look.
-    """
-    rng = np.random.default_rng(seed)
-
-    mottle = _fbm(size, 4, 4, 5, rng) - 0.5          # stone weathering patina
-    detail = _fbm(size, 16, 16, 3, rng) - 0.5        # rock surface roughness
-    grain = rng.random((size, size)) - 0.5           # fine porous mineral granules
-
-    variation = 0.60 * mottle + 0.25 * detail + 0.15 * grain
-
-    base = np.array([0.72, 0.73, 0.74])              # natural carved stone gray
-    channel = np.array([1.00, 1.00, 1.01])           # neutral cool stone
-    rgb = base[None, None, :] * (1.0 + variation[:, :, None] * channel[None, None, :])
-
-    return np.round(np.clip(rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
-
-
-def build(out_dir=None, seed=SEED):
-    """Generate the assets into out_dir (default: data/ next to this file).
-
-    Output: (obj_path, ppm_path) -- Paths to the two written files.
-    Deterministic: same seed -> byte-identical files, so renders and
-    diffs across machines stay comparable.
-
-    For the default location only, the same three files are copied to
-    web/data/ as well (see the module docstring for why).
-    """
-    canonical = out_dir is None
-    out_dir = Path(out_dir) if out_dir is not None else DATA_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    obj_path = out_dir / "temple.obj"
-    ppm_path = out_dir / "relief.ppm"
-    png_path = out_dir / "relief.png"
-
-    boxes = temple_boxes()
-    _write_obj(obj_path, boxes)
-    texture = sandstone_texture(256, seed)
-    ppm_io.write_ppm(ppm_path, texture)
-
-    # Browsers cannot decode PPM, so the web viewer needs the same texture
-    # as a PNG. Pillow is imported HERE, on purpose: in this project it is
-    # allowed to convert images for display, never to render or filter
-    # them. The PPM stays the artifact the pipeline samples.
-    from PIL import Image  # conversion only, see comment above
-
-    Image.fromarray(texture).save(png_path)
-
-    if canonical:
-        WEB_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        for src in (obj_path, ppm_path, png_path):
-            shutil.copyfile(src, WEB_DATA_DIR / src.name)
-
-    return obj_path, ppm_path
+    # Copy to web/data/ for standalone web viewer
+    web_data = os.path.join("web", "data")
+    os.makedirs(web_data, exist_ok=True)
+    for fname in ["pusaka_model.obj", "mymodel.obj", "temple.obj", "relief.ppm"]:
+        shutil.copy2(os.path.join(args.out, fname), os.path.join(web_data, fname))
 
 
 if __name__ == "__main__":
-    obj_path, ppm_path = build()
-    boxes = temple_boxes()
-    print(f"wrote {obj_path}")
-    print(f"  {len(boxes) * 8} vertices, {len(boxes) * 24} uvs, {len(boxes) * 12} triangles")
-    print(f"wrote {ppm_path}")
-    print(f"wrote {ppm_path.with_suffix('.png')} (viewer copy)")
-    print(f"copied the three files to {WEB_DATA_DIR} (viewer folder)")
-    print("  256x256 RGB sandstone texture")
+    main()
