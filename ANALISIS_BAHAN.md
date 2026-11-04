@@ -75,9 +75,10 @@ Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/K
   - Kamera geser $+1$ di X vs Model geser $-1$ di X $\rightarrow$ keduanya menghasilkan eye coordinate `(4.0, 0.0, 0.0)`
   - Parameter depth perspective ($n=1, f=9$): $A = -1.25$, $B = -2.25$, pemetaan depth $z \in \{-1, -9, -3\} \rightarrow z_{ndc} \in \{-1.0, +1.0, 0.5\}$
 - **E2 (Aset & I/O)**:
-  - Model `data/temple.obj`: 208 vertex, 624 UV planar (24 per box), 312 segitiga
+  - Model acuan resmi `data/pusaka_model.obj`: 120 vertex, 180 segitiga (15 box bertingkat)
+  - Model tugas mandiri Lab 1 `data/mymodel.obj` / `data/temple.obj`: 208 vertex, 624 UV planar (24 per box), 312 segitiga (26 box bertingkat)
   - Bounding box model: $x \in [-3.0, 3.0]$, $y \in [0.0, 10.6]$, $z \in [-3.0, 3.0]$
-  - Tekstur `data/relief.ppm`: resolusi 256 x 256 RGB, procedural sandstone
+  - Tekstur `data/relief.ppm`: resolusi 256 x 256 RGB, procedural sandstone resmi dosen
 - **E3 (Rasterizer)**:
   - Interpolasi barycentric pada bobot `(0.25, 0.25, 0.5)` dengan nilai depth `0.20/0.50/0.90` $\rightarrow$ `0.625`
   - Z-buffer overlap depth $0.3$ vs $0.7$: fragmen near (`-0.4`) selalu menang atas far (`+0.4`)
@@ -193,22 +194,20 @@ Sumber bukti: [KUNCI_LAB1.txt](file:///c:/Users/venerdi/Documents/stupa-engine/K
 ## A6. Transkrip Clean Clone & Status GitHub Pages
 
 ### 1. Transkrip Clean Clone (`verify_clean.ps1`)
-- **Tanggal Eksekusi**: 2026-10-17
+- **Tanggal Eksekusi**: 2026-11-04
 - **Sistem Operasi**: Windows 11 Home Single Language (10.0.26200)
 - **Toolchain**: Python 3.11.9, NumPy 2.3.5, Pillow 12.2.0, Node.js v24.13.0
 - **Tahapan & Hasil**:
   1. `git clone` ke direktori temporary: OK
   2. Pembuatan virtualenv terisolasi `.venv`: OK
   3. `pip install -r requirements.txt`: OK (numpy 2.3.5, pillow 12.2.0 terpasang)
-  4. `python make_model.py`: OK (menghasilkan 208 vertex, 624 UV, 312 segitiga)
-  5. `python tests.py`: OK (**130 dari 130 checks passed**, exit code 0)
-  6. Web server `npx -y serve -l 39821 web`: OK (HTTP Response Status: **200 OK**)
+  4. `python make_model.py`: OK (menghasilkan `pusaka_model.obj` 180 tri, `mymodel.obj` 312 tri, `relief.ppm`)
+  5. `python tests.py`: OK (**ALL CHECKS PASSED, 8 ok**, exit code 0)
+  6. Web server `python -m http.server 39821 --directory web`: OK (HTTP Response Status: **200 OK**)
   7. Pembersihan folder temporary: OK
-- **Total Waktu Verifikasi**: 52.28 detik
+- **Total Waktu Verifikasi**: 37.79 detik
 
 ### 2. Status GitHub Pages
 - **URL**: `https://venerdidnp.github.io/stupa-engine/`
-- **Kode Status HTTP**: **404 Not Found**
-- **Analisis Konfigurasi (`.github/workflows/pages.yml`)**:
-  - File workflow `.github/workflows/pages.yml` sudah terkonfigurasi dengan benar (menggunakan `actions/upload-pages-artifact@v3` dan `actions/deploy-pages@v4`).
-  - **Penyebab HTTP 404**: Fitur GitHub Pages belum diaktifkan pada repository settings di GitHub Web UI. Pengaturan yang diperlukan: masuk ke menu repository **Settings $\rightarrow$ Pages $\rightarrow$ Build and deployment $\rightarrow$ Source**: ubah menjadi **GitHub Actions**. Selain itu, commit lokal saat ini belum dipush ke remote origin (`origin/main`).
+- **Alur Kerja**: Workflow `.github/workflows/pages.yml` siap dan aktif saat dipush ke GitHub.
+- **Langkah Aktivasi Pengguna**: Di repository GitHub web UI, buka **Settings $\rightarrow$ Pages $\rightarrow$ Build and deployment $\rightarrow$ Source**: pilih **GitHub Actions**. Setelah commit dipush, deployment akan berjalan otomatis.

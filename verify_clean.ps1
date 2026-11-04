@@ -46,10 +46,10 @@ try {
     $testOutput | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "tests.py failed" }
 
-    Write-Host "`n[6/6] Testing web server (npx serve web)..." -ForegroundColor Yellow
+    Write-Host "`n[6/6] Testing web server (python -m http.server)..." -ForegroundColor Yellow
     $port = 39821
-    $serveProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx -y serve -l $port web" -PassThru -NoNewWindow
-    Start-Sleep -Seconds 4
+    $serveProcess = Start-Process -FilePath $venvPython -ArgumentList "-m http.server $port --directory web" -PassThru -NoNewWindow
+    Start-Sleep -Seconds 2
 
     try {
         $uri = "http://127.0.0.1:$port/index.html"
