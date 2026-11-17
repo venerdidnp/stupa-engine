@@ -93,7 +93,7 @@ npx serve .
   - `pitfall_demo.py`: Quantifies back-face culling efficiency (~37% time reduction, 18% fragment reduction) and demonstrates normal distortion under non-uniform scaling without the inverse-transpose normal matrix.
 
 - **Lab 3: Real-Time WebGL & Benchmark**
-  - `bench_frametime.py`: Benchmarks frame time of `raster3d` vs `raytrace` at 256&times;256 and 512&times;512 across multiple runs (results predicted in `PREDIKSI.md`).
+  - `bench_frametime.py`: Benchmarks frame time of `raster3d` vs `raytrace` at 256&times;256 and 512&times;512 across multiple runs.
   - `web/`: Real-time viewer with model selection (`pusaka_model.obj` vs `mymodel.obj`), toggle wireframe, and 512&times;512 PPM export.
   - `verify_clean.ps1`: Automated PowerShell script to verify a clean clone, virtualenv creation, tests, and web server response.
 

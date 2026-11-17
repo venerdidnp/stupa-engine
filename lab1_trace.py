@@ -50,7 +50,8 @@ def run_trace(vertex_idx=0, width=800, height=600, m_matrix=None):
     p_ndc = p_clip[:3] / p_clip[3]
 
     scr = viewport(p_ndc[None, :], width, height)[0]
-    p_screen = np.array([scr[0], scr[1], scr[2]], dtype=np.float64)
+    # viewport() returns NDC z in [-1,1] as 3rd column; depth01 = (ndc_z + 1) / 2
+    p_screen = np.array([scr[0], scr[1], (p_ndc[2] + 1.0) / 2.0], dtype=np.float64)
 
     # Baca kolom:
     # Untuk M:

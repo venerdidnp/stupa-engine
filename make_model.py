@@ -32,14 +32,16 @@ def box(cx, cz, half_x, y0, y1, half_z=None):
         [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1],   # bottom 0..3
         [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1],   # top    4..7
     ])
-    # each face: 2 triangles, wound CCW seen from outside
+    # each face: 2 triangles, wound CCW seen from outside, i.e. the
+    # right-handed normal (v1-v0)x(v2-v0) points AWAY from the box centre
+    # (tests.py::t_winding_outward counts this).
     faces = [
-        (4, 5, 6), (4, 6, 7),        # +y top
-        (0, 2, 1), (0, 3, 2),        # -y bottom
-        (0, 1, 5), (0, 5, 4),        # -z front
-        (2, 3, 7), (2, 7, 6),        # +z back
-        (3, 0, 4), (3, 4, 7),        # -x left
-        (1, 2, 6), (1, 6, 5),        # +x right
+        (4, 6, 5), (4, 7, 6),        # +y top
+        (0, 1, 2), (0, 2, 3),        # -y bottom
+        (0, 5, 1), (0, 4, 5),        # -z front
+        (2, 7, 3), (2, 6, 7),        # +z back
+        (3, 4, 0), (3, 7, 4),        # -x left
+        (1, 6, 2), (1, 5, 6),        # +x right
     ]
     # simple planar UVs: project each vertex onto x-y, scaled into [0,1] per box
     uv = np.c_[(P[:, 0] - x0) / max(2 * half_x, 1e-6),

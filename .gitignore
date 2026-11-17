@@ -13,7 +13,10 @@ web/temple_three.ppm
 web/*_three.ppm
 
 # Local documents
+docs/
 /LAPORAN_PERUBAHAN.md
 /KUNCI_LAB1.txt
 /PLAN.md
 /ANALISIS_BAHAN.md
+/PREDIKSI.md
+

@@ -8,6 +8,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 const W = 512, H = 512;
+if (new URLSearchParams(location.search).has("auto")) document.body.classList.add("auto");
 const canvas = document.getElementById("c");
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -26,8 +27,10 @@ controls.target.set(0, 0.7, 0);
 controls.update();
 
 // --- lights: ambient 0.15 + one directional along (0.4, 0.9, 0.6) ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.15));
-const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+// Three.js r155+ uses physically-correct light units: Lambert is albedo/PI, so
+// intensities must be multiplied by PI to equal raster3d's  albedo * (0.15 + 0.85 N.L).
+scene.add(new THREE.AmbientLight(0xffffff, 0.15 * Math.PI));
+const sun = new THREE.DirectionalLight(0xffffff, 0.85 * Math.PI);
 sun.position.set(0.4, 0.9, 0.6);
 scene.add(sun);
 
@@ -54,6 +57,13 @@ async function loadPPMTexture(url) {
   const tex = new THREE.DataTexture(rgba, w, h, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.flipY = true;                            // OBJ vt origin is bottom-left
+  // match raster3d: bilinear on level 0 only, wrap like np.mod
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.anisotropy = 1;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
   tex.needsUpdate = true;
   return tex;
 }
@@ -91,7 +101,7 @@ async function loadModel(modelFile) {
       currentTexture = await loadPPMTexture(texPath);
     }
     const obj = await new OBJLoader().loadAsync(modelPath);
-    const mat = new THREE.MeshLambertMaterial({ map: currentTexture, side: THREE.DoubleSide });
+    const mat = new THREE.MeshLambertMaterial({ map: currentTexture, side: THREE.FrontSide });
     obj.traverse((c) => { if (c.isMesh) c.material = mat; });
     obj.scale.set(1.4, 1.4, 1.4);
     obj.rotation.y = THREE.MathUtils.degToRad(35);   // rot_y(35) in transforms.py

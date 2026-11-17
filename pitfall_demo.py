@@ -11,6 +11,7 @@ pitfall_demo.py -- demonstrates and measures two common rendering pitfalls (Lab 
 Writes full report to out/pitfall_report.txt.
 """
 
+import argparse
 from pathlib import Path
 import time
 import numpy as np
@@ -150,9 +151,17 @@ def measure_normal_matrix(mesh, texture, camera):
     }
 
 
-def main():
+def main(argv=None):
+    global OUT_DIR
+    ap = argparse.ArgumentParser(description="Back-face culling and normal-matrix pitfall measurements.")
+    ap.add_argument("--model", default=str(DATA_DIR / "temple.obj"),
+                    help="OBJ to measure (default data/temple.obj = mymodel.obj, 312 tris)")
+    ap.add_argument("--out-dir", default=str(OUT_DIR),
+                    help="where reports/images go (default out/)")
+    args = ap.parse_args(argv)
+    OUT_DIR = Path(args.out_dir)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    obj_path = DATA_DIR / "temple.obj"
+    obj_path = Path(args.model)
     tex_path = DATA_DIR / "relief.ppm"
     if not (obj_path.is_file() and tex_path.is_file()):
         import make_model

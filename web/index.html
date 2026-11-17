@@ -14,6 +14,10 @@
   canvas { border: 1px solid #333; display: block; }
   button { font: inherit; padding: .3rem .7rem; margin: .6rem .4rem 0 0; }
   .hint { font-size: .78rem; color: #999; max-width: 520px; }
+  /* ?auto=1 (webshot.py): show only the 512x512 canvas pinned at (0,0) */
+  body.auto header, body.auto #wrap > :not(canvas) { display: none; }
+  body.auto #wrap { padding: 0; }
+  body.auto canvas { border: 0; }
 </style>
 <script type="importmap">
 { "imports": {

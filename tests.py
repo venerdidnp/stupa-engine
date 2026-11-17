@@ -115,6 +115,26 @@ def t_reference_frame():
     assert p == float("inf") or p > 60, f"temple frame PSNR vs ref = {p:.1f} dB"
 
 
+def t_winding_outward():
+    """Every triangle of both generated models is wound CCW seen from outside:
+    its normal (v1-v0)x(v2-v0) points away from the centre of its box
+    (make_model.box emits 8 vertices / 12 triangles per box)."""
+    import os
+    from objio import load_obj
+    for path, want in (("data/pusaka_model.obj", 180), ("data/mymodel.obj", 312)):
+        if not os.path.exists(path):
+            print(f"     (run make_model.py first -- skipping {path})"); continue
+        m = load_obj(path)
+        pos, F = m.positions, m.faces
+        a, b, c = pos[F[:, 0]], pos[F[:, 1]], pos[F[:, 2]]
+        n = np.cross(b - a, c - a)
+        cen = (a + b + c) / 3.0
+        centre = np.repeat(pos.reshape(-1, 8, 3).mean(axis=1), 12, axis=0)
+        outward = int((np.einsum("ij,ij->i", n, cen - centre) > 0).sum())
+        assert len(F) == want and outward == want, \
+            f"{path}: {outward} of {len(F)} triangles have an outward normal (want {want})"
+
+
 def main():
     checks = [
         ("E1  running point (2,3,4) -> (3,3,-3); divide d=2 -> (2,2); order matters", t_e1_running_point),
@@ -125,6 +145,7 @@ def main():
         ("projection pipeline shapes + viewport", t_projection_pipeline_shapes),
         ("one-triangle z-buffer render fills a plausible region, flat depth", t_one_triangle_render),
         ("temple frame matches ref/temple_ref.ppm (byte-identical on re-render)", t_reference_frame),
+        ("winding: all 180 + 312 triangles have an outward-pointing normal (CCW from outside)", t_winding_outward),
     ]
     ok = all(check(n, f) for n, f in checks)
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))

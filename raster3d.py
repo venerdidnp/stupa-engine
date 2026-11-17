@@ -53,12 +53,14 @@ class Texture:
 def sample_bilinear(tex_lin, u, v):
     """tex_lin: (H,W,3) float in linear light. u,v arrays in [0,1] (wrapped)."""
     H, W = tex_lin.shape[:2]
-    u = np.mod(u, 1.0) * (W - 1)
-    v = np.mod(v, 1.0) * (H - 1)
-    x0 = np.floor(u).astype(int); y0 = np.floor(v).astype(int)
-    x1 = np.clip(x0 + 1, 0, W - 1); y1 = np.clip(y0 + 1, 0, H - 1)
-    fx = (u - x0)[..., None]; fy = (v - y0)[..., None]
-    x0 = np.clip(x0, 0, W - 1); y0 = np.clip(y0, 0, H - 1)
+    # texel-centre convention (same as the GPU): texel i is centred at (i + 0.5) / W;
+    # indices wrap (REPEAT) with np.mod.
+    u = u * W - 0.5
+    v = v * H - 0.5
+    x0f = np.floor(u); y0f = np.floor(v)
+    fx = (u - x0f)[..., None]; fy = (v - y0f)[..., None]
+    x0 = np.mod(x0f.astype(int), W); y0 = np.mod(y0f.astype(int), H)
+    x1 = np.mod(x0f.astype(int) + 1, W); y1 = np.mod(y0f.astype(int) + 1, H)
     top = tex_lin[y0, x0] * (1 - fx) + tex_lin[y0, x1] * fx
     bot = tex_lin[y1, x0] * (1 - fx) + tex_lin[y1, x1] * fx
     return top * (1 - fy) + bot * fy

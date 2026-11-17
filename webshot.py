@@ -39,7 +39,16 @@ import compare
 import objio
 import ppm_io
 import raster3d
-from raster3d import RenderSettings, Texture, render_scene, write_png_preview
+from raster3d import RenderSettings, Texture, render_scene
+from transforms import rot_y, scale, translate
+
+
+def write_png_preview(ppm_path):
+    """Write <ppm_path with .png suffix> next to a PPM (Pillow, preview only)."""
+    from PIL import Image  # conversion only, see the module docstring
+
+    ppm_path = Path(ppm_path)
+    Image.fromarray(ppm_io.read_ppm(ppm_path)).save(ppm_path.with_suffix(".png"))
 
 
 ROOT = Path(__file__).resolve().parent
@@ -83,10 +92,13 @@ def find_browser(explicit):
 
 def render_reference(size):
     """Render the NumPy frame the viewer must match. Output: PPM path."""
-    mesh = objio.load_obj(DATA_DIR / "temple.obj")
-    texture = Texture(ppm_io.read_ppm(DATA_DIR / "relief.ppm")[2])
+    # Same model + model matrix as web/viewer.js: pusaka_model.obj,
+    # scale 1.4, rotation.y = 35 deg (= translate @ rot_y(35) @ scale in transforms.py).
+    mesh = objio.load_obj(DATA_DIR / "pusaka_model.obj")
+    texture = Texture(ppm_io.read_ppm(DATA_DIR / "relief.ppm"))
     settings = RenderSettings(width=size, height=size)
-    result = render_scene(mesh, texture, settings)
+    m_matrix = translate((0, 0, 0)) @ rot_y(35) @ scale((1.4, 1.4, 1.4))
+    result = render_scene(mesh, texture, settings, m_matrix=m_matrix)
     path = OUT_DIR / "webgl_ref.ppm"
     ppm_io.write_ppm(path, result.color_srgb)
     write_png_preview(path)
@@ -169,13 +181,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     required = [
-        DATA_DIR / "temple.obj",
+        DATA_DIR / "pusaka_model.obj",
         DATA_DIR / "relief.ppm",
-        DATA_DIR / "relief.png",
-        ROOT / "web" / "data" / "temple.obj",
-        ROOT / "web" / "data" / "relief.png",
+        ROOT / "web" / "data" / "pusaka_model.obj",
+        ROOT / "web" / "data" / "relief.ppm",
         ROOT / "web" / "index.html",
-        ROOT / "web" / "style.css",
         ROOT / "web" / "viewer.js",
     ]
     for path in required:
@@ -203,26 +213,30 @@ def main(argv=None):
         return 2
     shot_path = png_to_ppm(png_path, args.size)
 
-    _, _, ref_img = ppm_io.read_ppm(ref_path)
-    _, _, shot_img = ppm_io.read_ppm(shot_path)
+    ref_img = ppm_io.read_ppm(ref_path)
+    shot_img = ppm_io.read_ppm(shot_path)
     result = compare.compare_images(ref_img, shot_img)
 
+    # compare_images() reports scalars only; build the amplified diff and
+    # locate the worst pixel here (diff x6, same default as compare.py).
+    absdiff = np.abs(ref_img.astype(np.int32) - shot_img.astype(np.int32))
     diff_path = OUT_DIR / "webgl_diff.ppm"
-    ppm_io.write_ppm(diff_path, result["diff"])
+    ppm_io.write_ppm(diff_path, np.clip(absdiff * 6, 0, 255).astype(np.uint8))
     write_png_preview(diff_path)
 
-    row, col, chan = result["worst"]
+    row, col, chan = np.unravel_index(int(np.argmax(absdiff)), absdiff.shape)
     psnr_text = "inf" if np.isinf(result["psnr"]) else f"{result['psnr']:.2f}"
     print(f"webshot: {shot_path.name} vs {ref_path.name} ({args.size}x{args.size})")
     print(f"  PSNR             : {psnr_text} dB")
     print(f"  SSIM (global)    : {result['ssim']:.6f}")
     print(
-        f"  max  |diff|      : {result['max_abs']:.6f} "
+        f"  max  |diff|      : {result['max_diff']} "
         f"at row {row}, col {col}, channel {chan}"
     )
+    n_pix = args.size * args.size
     print(
-        f"  different pixels : {result['differing_pixels']} of {args.size * args.size} "
-        f"({100.0 * result['differing_fraction']:.2f}%)"
+        f"  different pixels : {result['differing_pixels']} of {n_pix} "
+        f"({100.0 * result['differing_pixels'] / n_pix:.2f}%)"
     )
     print(f"  diff image       : {diff_path} (+ .png preview)")
 
